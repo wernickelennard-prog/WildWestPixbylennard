@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Zoom & Anim Fix</title>
+    <title>Sheriff - Saloon Realism Update</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; touch-action: none; }
@@ -36,23 +36,41 @@ class Overworld extends Phaser.Scene {
 
         this.obstacles = this.physics.add.staticGroup();
 
-        // SALOON: Etwas kleiner als vorher (1.2)
+        // SALOON POSITION
         const saloonX = 3500;
         const saloonY = 600;
+
+        // --- REALISMUS-EFFEKTE ---
+        // 1. Großer weicher Schatten unter dem ganzen Haus
+        this.add.ellipse(saloonX, saloonY + 280, 850, 120, 0x000000, 0.4).setOrigin(0.5);
+        
+        // 2. "Dreck-Haufen" an den Ecken (macht die Kanten weicher)
+        this.add.ellipse(saloonX - 380, saloonY + 300, 150, 40, 0x000000, 0.3);
+        this.add.ellipse(saloonX + 380, saloonY + 300, 150, 40, 0x000000, 0.3);
+
+        // Den Saloon selbst platzieren
         this.saloonBuilding = this.obstacles.create(saloonX, saloonY, 'saloon').setScale(1.2).refreshBody();
         this.saloonBuilding.body.setSize(this.saloonBuilding.width, 250).setOffset(0, this.saloonBuilding.height - 250);
+
+        // 3. Kakteen DIREKT vor den Saloon setzen (Überlappung)
+        // Das bricht die harte Linie des Fotos auf
+        let decoKaktus = this.obstacles.create(saloonX - 350, saloonY + 320, 'k1').setScale(0.4).refreshBody();
+        decoKaktus.setDepth(saloonY + 320); 
 
         // Tür-Bereich
         this.doorTrigger = this.add.rectangle(saloonX - 15, saloonY + 280, 120, 80, 0xff0000, 0); 
         this.physics.add.existing(this.doorTrigger, true);
 
-        // Kakteen
-        for(let i = 0; i < 50; i++) {
-            let x = Phaser.Math.Between(200, worldSize - 600);
+        // Restliche Kakteen in der Welt
+        for(let i = 0; i < 60; i++) {
+            let x = Phaser.Math.Between(200, worldSize - 200);
             let y = Phaser.Math.Between(200, worldSize - 200);
-            let k = this.obstacles.create(x, y, Phaser.Math.RND.pick(['k1','k2','k3']));
-            k.setScale(0.3).refreshBody();
-            k.body.setSize(60, 60).setOffset(k.width/2-30, k.height-80);
+            // Nicht IM Saloon spawnen
+            if (Phaser.Math.Distance.Between(x, y, saloonX, saloonY) > 500) {
+                let k = this.obstacles.create(x, y, Phaser.Math.RND.pick(['k1','k2','k3']));
+                k.setScale(0.3).refreshBody();
+                k.body.setSize(60, 60).setOffset(k.width/2-30, k.height-80);
+            }
         }
 
         // SHERIFF
@@ -60,7 +78,7 @@ class Overworld extends Phaser.Scene {
         this.player.body.setSize(120, 60).setOffset(196, 430);
         this.player.setCollideWorldBounds(true);
 
-        // ANIMATIONEN (Wieder aktiviert)
+        // Animationen
         const dirs = [{k:'v',s:'s_v'},{k:'h',s:'s_h'},{k:'r',s:'s_r'},{k:'l',s:'s_l'}];
         dirs.forEach(d => {
             this.anims.create({
@@ -74,33 +92,17 @@ class Overworld extends Phaser.Scene {
         this.physics.add.collider(this.player, this.obstacles);
         this.physics.add.overlap(this.player, this.doorTrigger, () => this.enterSaloon());
 
-        // --- ZOOM LOGIK ---
+        // ZOOM (beibehalten)
         this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
             let newZoom = this.cameras.main.zoom - deltaY * 0.001;
             this.cameras.main.setZoom(Phaser.Math.Clamp(newZoom, 0.3, 1.5));
         });
 
-        // Pinch to Zoom (Handy)
-        this.input.addPointer(1); 
-        this.input.on('pointermove', (pointer) => {
-            if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
-                let dist = Phaser.Math.Distance.Between(this.input.pointer1.x, this.input.pointer1.y, this.input.pointer2.x, this.input.pointer2.y);
-                if (this.prevDist > 0) {
-                    let zoomDelta = (dist - this.prevDist) * 0.005;
-                    let newZoom = this.cameras.main.zoom + zoomDelta;
-                    this.cameras.main.setZoom(Phaser.Math.Clamp(newZoom, 0.3, 1.5));
-                }
-                this.prevDist = dist;
-            }
-        });
-        this.input.on('pointerup', () => { this.prevDist = 0; });
-
-        // Bewegung
         this.targetPoint = new Phaser.Math.Vector2(this.player.x, this.player.y);
         this.isMoving = false;
 
         this.input.on('pointerdown', (pointer) => {
-            if (this.isEntering || (this.input.pointer1.isDown && this.input.pointer2.isDown)) return;
+            if (this.isEntering) return;
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
             this.targetPoint.x = worldPoint.x;
             this.targetPoint.y = worldPoint.y;
@@ -129,13 +131,14 @@ class Overworld extends Phaser.Scene {
                 this.player.setFrame(1);
                 this.isMoving = false;
             } else {
-                // Animationen hier abspielen
                 if (deg > -45 && deg <= 45) this.player.play('walk_r', true);
                 else if (deg > 45 && deg <= 135) this.player.play('walk_v', true);
                 else if (deg > -135 && deg <= -45) this.player.play('walk_h', true);
                 else this.player.play('walk_l', true);
             }
         }
+        
+        // Y-Sortierung für alles
         this.player.setDepth(this.player.y);
         this.obstacles.getChildren().forEach(o => o.setDepth(o.y));
     }
