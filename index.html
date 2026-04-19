@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Kaktus & Saloon Fix</title>
+    <title>Sheriff - PNG Fix & Kakteen</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; touch-action: none; }
@@ -23,10 +23,13 @@ class Overworld extends Phaser.Scene {
         this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
         this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', fConfig);
         this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', fConfig);
+        
         this.load.image('sand', 'Sand.png'); 
         this.load.image('k1', 'Kaktus-.png'); 
         this.load.image('k2', 'Kaktus_anderer_art.png');
         this.load.image('k3', 'Kaktus-Kugel.png');
+        
+        // FIX: Jetzt als .png laden!
         this.load.image('saloon_ext', 'Saloon-.png');
     }
 
@@ -38,8 +41,7 @@ class Overworld extends Phaser.Scene {
         this.obstacles = this.physics.add.staticGroup();
         const sX = 3500, sY = 600;
 
-        // BODEN-FIX: Weicher Übergang für den Saloon
-        // Wir legen mehrere Schatten-Ebenen unter das Haus
+        // Schatten-Vignette unter dem Saloon für besseren Übergang
         for(let i = 1; i <= 3; i++) {
             this.add.rectangle(sX, sY + 300, 950 + (i*20), 100 + (i*10), 0x000000, 0.1).setOrigin(0.5);
         }
@@ -47,25 +49,22 @@ class Overworld extends Phaser.Scene {
         this.saloon = this.obstacles.create(sX, sY, 'saloon_ext').setScale(1.2).refreshBody();
         this.saloon.body.setSize(this.saloon.width, 250).setOffset(0, this.saloon.height - 250);
 
-        // KAKTEEN SIND ZURÜCK
+        // KAKTEEN-SCHLEIFE (fest eingebaut)
         const kTypes = ['k1', 'k2', 'k3'];
         for(let i = 0; i < 80; i++) {
             let x = Phaser.Math.Between(200, worldSize - 200);
             let y = Phaser.Math.Between(200, worldSize - 200);
             
-            // Verhindern, dass sie direkt AUF dem Saloon spawnen, aber drumherum ist okay
-            if (Phaser.Math.Distance.Between(x, y, sX, sY) > 400 || y > sY + 300) {
+            if (Phaser.Math.Distance.Between(x, y, sX, sY) > 450 || y > sY + 320) {
                 let k = this.obstacles.create(x, y, Phaser.Math.RND.pick(kTypes));
                 k.setScale(0.3).refreshBody();
                 k.body.setSize(60, 60).setOffset(k.width/2-30, k.height-80);
             }
         }
 
-        // Tür-Trigger
         this.doorTrigger = this.add.rectangle(sX - 15, sY + 280, 100, 60, 0xff0000, 0); 
         this.physics.add.existing(this.doorTrigger, true);
 
-        // Sheriff
         this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 's_v', 1).setScale(0.25);
         this.player.body.setSize(120, 60).setOffset(196, 430);
         
@@ -75,7 +74,6 @@ class Overworld extends Phaser.Scene {
         this.physics.add.collider(this.player, this.obstacles);
         this.physics.add.overlap(this.player, this.doorTrigger, () => this.scene.start('SaloonInside'));
 
-        // Zoom & Steuerung wie gehabt
         this.input.on('wheel', (p, g, dx, dy) => {
             this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom - dy * 0.001, 0.4, 1.2));
         });
@@ -119,17 +117,13 @@ class Overworld extends Phaser.Scene {
     }
 }
 
-// --- SZENE 2: SALOON INNEN (Unverändert) ---
+// --- SZENE 2: SALOON INNEN ---
 class SaloonInside extends Phaser.Scene {
     constructor() { super('SaloonInside'); }
 
     preload() {
+        // FIX: Auch hier .png statt .jpg
         this.load.image('saloon_bg', 'imSaloon.png');
-        const fConfig = { frameWidth: 512, frameHeight: 512 };
-        this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', fConfig);
-        this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
-        this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', fConfig);
-        this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', fConfig);
     }
 
     create() {
