@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Gunfight & Saloon Corner</title>
+    <title>Sheriff - Pixel Button & Font</title>
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; touch-action: none; }
@@ -18,24 +19,18 @@ class Overworld extends Phaser.Scene {
 
     preload() {
         const fConfig = { frameWidth: 512, frameHeight: 512 };
-        // Gehen
         this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', fConfig);
         this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
         this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', fConfig);
         this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', fConfig);
-        
-        // Schießen (Deine neuen Dateien)
         this.load.spritesheet('sh_v', 'Sheriff-spritesheet_Vschuss.png', fConfig);
         this.load.spritesheet('sh_h', 'Sheriff-Hschuss.png', fConfig);
         this.load.spritesheet('sh_r', 'Sheriff_spritesheet_Rschuss.png', fConfig);
         this.load.spritesheet('sh_l', 'Sheriff-spritesheet_Lschuss.png', fConfig);
-
-        // Kugeln
         this.load.image('b_v', 'Kugel-V.png');
         this.load.image('b_h', 'Kugel-H.png');
         this.load.image('b_r', 'Kugel-R.png');
         this.load.image('b_l', 'Kugel-L.png');
-
         this.load.image('sand', 'Sand.png'); 
         this.load.image('k1', 'Kaktus-.png'); 
         this.load.image('k2', 'Kaktus_anderer_art.png');
@@ -51,9 +46,8 @@ class Overworld extends Phaser.Scene {
         this.obstacles = this.physics.add.staticGroup();
         this.bullets = this.physics.add.group();
 
-        // SALOON POSITION: Rechts bündig an der Ecke
-        const sX = 3540; 
-        const sY = 500; 
+        // Saloon Corner
+        const sX = 3540, sY = 500; 
         this.add.rectangle(sX, sY + 310, 950, 100, 0x000000, 0.15).setOrigin(0.5);
         this.saloon = this.obstacles.create(sX, sY, 'saloon_ext').setScale(1.2).refreshBody();
 
@@ -75,44 +69,73 @@ class Overworld extends Phaser.Scene {
         this.isShooting = false;
 
         this.createAnims();
+        this.createShootButton(); // Button erstellen
 
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.physics.add.collider(this.player, this.obstacles);
         this.physics.add.collider(this.bullets, this.obstacles, (b) => b.destroy());
 
+        // Laufen nur wenn nicht auf Button geklickt wird
         this.input.on('pointerdown', (pointer) => {
+            if (pointer.x > 650 && pointer.y > 450) return; // Bereich des Buttons ignorieren
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-            this.handleAction(worldPoint);
+            this.target = worldPoint;
+            this.physics.moveToObject(this.player, this.target, 250);
+            this.isMoving = true;
         });
     }
 
+    createShootButton() {
+        // UI Container fixiert an der Kamera
+        const btnX = 700;
+        const btnY = 520;
+
+        // Button Hintergrund (Pixel-Stil)
+        const btnBg = this.add.rectangle(btnX, btnY, 120, 80, 0x8B4513, 1)
+            .setStrokeStyle(4, 0x5D2E0A)
+            .setInteractive({ useHandCursor: true })
+            .setScrollFactor(0);
+
+        // Button Text mit Pixelify Sans
+        const btnText = this.add.text(btnX, btnY, 'FEUER', {
+            fontFamily: '"Pixelify Sans"',
+            fontSize: '24px',
+            color: '#FFD700',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setScrollFactor(0);
+
+        // Button Interaktion
+        btnBg.on('pointerdown', () => {
+            btnBg.setFillStyle(0x5D2E0A);
+            this.shoot();
+        });
+        btnBg.on('pointerup', () => btnBg.setFillStyle(0x8B4513));
+    }
+
     createAnims() {
-        const dirs = ['v', 'h', 'r', 'l'];
-        dirs.forEach(d => {
-            // Gehen
+        ['v', 'h', 'r', 'l'].forEach(d => {
             this.anims.create({ key: 'walk_'+d, frames: this.anims.generateFrameNumbers('s_'+d, {start:0, end:2}), frameRate: 10, repeat: -1 });
-            // Schießen
             this.anims.create({ key: 'shoot_'+d, frames: this.anims.generateFrameNumbers('sh_'+d, {start:0, end:2}), frameRate: 15, repeat: 0 });
         });
     }
 
-    handleAction(target) {
-        // Schuss-Logik
+    shoot() {
+        if (this.isShooting) return;
         this.isShooting = true;
         this.player.play('shoot_' + this.currentDir, true);
-        
-        // Kugel spawnen passend zur Richtung
-        const bulletKey = 'b_' + this.currentDir;
-        const bullet = this.bullets.create(this.player.x, this.player.y, bulletKey).setScale(0.6);
-        this.physics.moveToObject(bullet, target, 1000);
+
+        // Kugel in Blickrichtung schießen
+        const bullet = this.bullets.create(this.player.x, this.player.y, 'b_' + this.currentDir).setScale(0.6);
+        let vx = 0, vy = 0;
+        if (this.currentDir === 'r') vx = 1000;
+        else if (this.currentDir === 'l') vx = -1000;
+        else if (this.currentDir === 'v') vy = 1000;
+        else if (this.currentDir === 'h') vy = -1000;
+
+        bullet.body.setVelocity(vx, vy);
         
         this.time.delayedCall(200, () => { this.isShooting = false; });
         this.time.delayedCall(1000, () => { bullet.destroy(); });
-
-        // Laufen
-        this.target = target;
-        this.physics.moveToObject(this.player, this.target, 250);
-        this.isMoving = true;
     }
 
     update() {
@@ -125,7 +148,6 @@ class Overworld extends Phaser.Scene {
             } else {
                 let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.target.x, this.target.y);
                 let deg = Phaser.Math.RadToDeg(angle);
-                
                 if (deg > -45 && deg <= 45) { this.player.play('walk_r', true); this.currentDir = 'r'; }
                 else if (deg > 45 && deg <= 135) { this.player.play('walk_v', true); this.currentDir = 'v'; }
                 else if (deg > -135 && deg <= -45) { this.player.play('walk_h', true); this.currentDir = 'h'; }
@@ -133,7 +155,6 @@ class Overworld extends Phaser.Scene {
             }
         }
         this.player.setDepth(this.player.y);
-        this.obstacles.getChildren().forEach(o => o.setDepth(o.y));
     }
 }
 
