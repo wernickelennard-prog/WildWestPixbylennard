@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wild West Sheriff</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
+        canvas { display: block; margin: 0 auto; }
+    </style>
+</head>
+<body>
+
+<script>
+// --- SZENE 1: DIE STADT (OVERWORLD) ---
+class Overworld extends Phaser.Scene {
+    constructor() {
+        super('Overworld');
+    }
+
+    preload() {
+        // Hier laden wir dein tolles Sheriff-Bild!
+        this.load.image('sheriff', 'Sheriff.png');
+    }
+
+    create() {
+        this.add.text(10, 10, "Stadt: Suche Banditen", { fontSize: '18px', fill: '#ffffff' });
+
+        // Wir erstellen den Sheriff
+        // .setScale(0.15) verkleinert das 1024px Bild auf Handy-Größe
+        this.player = this.physics.add.sprite(180, 400, 'sheriff').setScale(0.15);
+        this.player.setCollideWorldBounds(true);
+
+        // Ein Platzhalter-Bandit (rotes Quadrat)
+        this.banditNPC = this.add.rectangle(180, 150, 50, 50, 0xff0000).setInteractive();
+        
+        this.add.text(140, 110, "BANDIT", { fontSize: '14px', fill: '#ff0000' });
+
+        // Wenn man auf den Banditen klickt, startet der Kampf
+        this.banditNPC.on('pointerdown', () => {
+            this.scene.start('BattleScene');
+        });
+
+        // Info-Text für den User
+        this.add.text(40, 580, "Tippe den Banditen an zum Kämpfen!", { fontSize: '14px', fill: '#aaaaaa' });
+    }
+
+    update() {
+        // Hier bauen wir als nächstes die Steuerung ein
+    }
+}
+
+// --- SZENE 2: DER KAMPF (BATTLE) ---
+class BattleScene extends Phaser.Scene {
+    constructor() {
+        super('BattleScene');
+    }
+
+    create() {
+        this.add.text(20, 20, "KAMPF-MODUS!", { fontSize: '24px', fill: '#ff0000' });
+        this.add.text(20, 60, "Tippe den Banditen schnell an!", { fontSize: '16px', fill: '#ffffff' });
+
+        // Der "Whack-a-Mole" Bandit (hier ein Kreis)
+        this.target = this.add.circle(180, 320, 40, 0xff0000).setInteractive();
+
+        this.target.on('pointerdown', () => {
+            // Effekt bei Treffer
+            this.cameras.main.shake(100, 0.01);
+            alert("Bandit gefasst! +10 Münzen");
+            this.scene.start('Overworld');
+        });
+
+        // Button um zurückzugehen (Flucht)
+        let backBtn = this.add.text(20, 600, "< Zurück zur Stadt", { fill: '#ffff00' }).setInteractive();
+        backBtn.on('pointerdown', () => this.scene.start('Overworld'));
+    }
+}
+
+// --- SPIEL-KONFIGURATION ---
+const config = {
+    type: Phaser.AUTO,
+    width: 360,
+    height: 640,
+    backgroundColor: '#2d2d2d',
+    physics: {
+        default: 'arcade',
+        arcade: { debug: false }
+    },
+    // Hier sagen wir Phaser, welche Szenen es gibt
+    scene: [Overworld, BattleScene],
+    pixelArt: true 
+};
+
+const game = new Phaser.Game(config);
+</script>
+
+</body>
+</html>
