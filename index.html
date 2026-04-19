@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Saloon Door Fix</title>
+    <title>Sheriff - Gunfight & Saloon Corner</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; touch-action: none; }
@@ -13,16 +13,29 @@
 <body>
 
 <script>
-// --- SZENE 1: AUSSENWELT ---
 class Overworld extends Phaser.Scene {
     constructor() { super('Overworld'); }
 
     preload() {
         const fConfig = { frameWidth: 512, frameHeight: 512 };
+        // Gehen
         this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', fConfig);
         this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
         this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', fConfig);
         this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', fConfig);
+        
+        // Schießen (Deine neuen Dateien)
+        this.load.spritesheet('sh_v', 'Sheriff-spritesheet_Vschuss.png', fConfig);
+        this.load.spritesheet('sh_h', 'Sheriff-Hschuss.png', fConfig);
+        this.load.spritesheet('sh_r', 'Sheriff_spritesheet_Rschuss.png', fConfig);
+        this.load.spritesheet('sh_l', 'Sheriff-spritesheet_Lschuss.png', fConfig);
+
+        // Kugeln
+        this.load.image('b_v', 'Kugel-V.png');
+        this.load.image('b_h', 'Kugel-H.png');
+        this.load.image('b_r', 'Kugel-R.png');
+        this.load.image('b_l', 'Kugel-L.png');
+
         this.load.image('sand', 'Sand.png'); 
         this.load.image('k1', 'Kaktus-.png'); 
         this.load.image('k2', 'Kaktus_anderer_art.png');
@@ -34,18 +47,17 @@ class Overworld extends Phaser.Scene {
         const worldSize = 4000;
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
         this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2.5);
+
         this.obstacles = this.physics.add.staticGroup();
-        const sX = 3500, sY = 600;
+        this.bullets = this.physics.add.group();
 
-        // BODEN-FIX: Mehrstufige Schatten für weicheren Übergang
-        for(let i = 1; i <= 5; i++) {
-            this.add.rectangle(sX, sY + 310, 940 + (i*15), 80 + (i*8), 0x000000, 0.08).setOrigin(0.5);
-        }
-
+        // SALOON POSITION: Rechts bündig an der Ecke
+        const sX = 3540; 
+        const sY = 500; 
+        this.add.rectangle(sX, sY + 310, 950, 100, 0x000000, 0.15).setOrigin(0.5);
         this.saloon = this.obstacles.create(sX, sY, 'saloon_ext').setScale(1.2).refreshBody();
-        this.saloon.body.setSize(this.saloon.width, 200).setOffset(0, this.saloon.height - 200);
 
-        // Kakteen (Wiederhergestellt)
+        // Kakteen
         const kTypes = ['k1', 'k2', 'k3'];
         for(let i = 0; i < 80; i++) {
             let x = Phaser.Math.Between(200, worldSize - 200);
@@ -57,43 +69,54 @@ class Overworld extends Phaser.Scene {
             }
         }
 
-        this.doorTrigger = this.add.rectangle(sX - 15, sY + 280, 100, 60, 0xff0000, 0); 
-        this.physics.add.existing(this.doorTrigger, true);
-
-        // Startposition in der Wüste
-        this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 's_v', 1).setScale(0.25);
+        this.player = this.physics.add.sprite(2000, 2000, 's_v', 1).setScale(0.25);
         this.player.body.setSize(120, 60).setOffset(196, 430);
-        
+        this.currentDir = 'v';
+        this.isShooting = false;
+
         this.createAnims();
 
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.physics.add.collider(this.player, this.obstacles);
-        this.physics.add.overlap(this.player, this.doorTrigger, () => this.scene.start('SaloonInside'));
+        this.physics.add.collider(this.bullets, this.obstacles, (b) => b.destroy());
 
-        this.input.on('wheel', (p, g, dx, dy) => {
-            this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom - dy * 0.001, 0.4, 1.2));
-        });
-
-        this.target = new Phaser.Math.Vector2(this.player.x, this.player.y);
         this.input.on('pointerdown', (pointer) => {
-            const p = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-            this.target.copy(p);
-            this.physics.moveToObject(this.player, this.target, 250);
-            this.isMoving = true;
+            const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+            this.handleAction(worldPoint);
         });
     }
 
     createAnims() {
-        const dirs = [{k:'v',s:'s_v'},{k:'h',s:'s_h'},{k:'r',s:'s_r'},{k:'l',s:'s_l'}];
+        const dirs = ['v', 'h', 'r', 'l'];
         dirs.forEach(d => {
-            if (!this.anims.exists('walk_' + d.k)) {
-                this.anims.create({ key: 'walk_'+d.k, frames: this.anims.generateFrameNumbers(d.s, {start:0, end:2}), frameRate: 10, repeat: -1 });
-            }
+            // Gehen
+            this.anims.create({ key: 'walk_'+d, frames: this.anims.generateFrameNumbers('s_'+d, {start:0, end:2}), frameRate: 10, repeat: -1 });
+            // Schießen
+            this.anims.create({ key: 'shoot_'+d, frames: this.anims.generateFrameNumbers('sh_'+d, {start:0, end:2}), frameRate: 15, repeat: 0 });
         });
     }
 
+    handleAction(target) {
+        // Schuss-Logik
+        this.isShooting = true;
+        this.player.play('shoot_' + this.currentDir, true);
+        
+        // Kugel spawnen passend zur Richtung
+        const bulletKey = 'b_' + this.currentDir;
+        const bullet = this.bullets.create(this.player.x, this.player.y, bulletKey).setScale(0.6);
+        this.physics.moveToObject(bullet, target, 1000);
+        
+        this.time.delayedCall(200, () => { this.isShooting = false; });
+        this.time.delayedCall(1000, () => { bullet.destroy(); });
+
+        // Laufen
+        this.target = target;
+        this.physics.moveToObject(this.player, this.target, 250);
+        this.isMoving = true;
+    }
+
     update() {
-        if (this.isMoving) {
+        if (this.isMoving && !this.isShooting) {
             let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.target.x, this.target.y);
             if (dist < 10) {
                 this.player.body.reset(this.target.x, this.target.y);
@@ -102,10 +125,11 @@ class Overworld extends Phaser.Scene {
             } else {
                 let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.target.x, this.target.y);
                 let deg = Phaser.Math.RadToDeg(angle);
-                if (deg > -45 && deg <= 45) this.player.play('walk_r', true);
-                else if (deg > 45 && deg <= 135) this.player.play('walk_v', true);
-                else if (deg > -135 && deg <= -45) this.player.play('walk_h', true);
-                else this.player.play('walk_l', true);
+                
+                if (deg > -45 && deg <= 45) { this.player.play('walk_r', true); this.currentDir = 'r'; }
+                else if (deg > 45 && deg <= 135) { this.player.play('walk_v', true); this.currentDir = 'v'; }
+                else if (deg > -135 && deg <= -45) { this.player.play('walk_h', true); this.currentDir = 'h'; }
+                else { this.player.play('walk_l', true); this.currentDir = 'l'; }
             }
         }
         this.player.setDepth(this.player.y);
@@ -113,71 +137,10 @@ class Overworld extends Phaser.Scene {
     }
 }
 
-// --- SZENE 2: SALOON INNEN ---
-class SaloonInside extends Phaser.Scene {
-    constructor() { super('SaloonInside'); }
-
-    preload() {
-        this.load.image('saloon_bg', 'imSaloon.png');
-    }
-
-    create() {
-        const bg = this.add.image(400, 300, 'saloon_bg').setScale(1.2);
-        
-        // Geh-Bereich: Sheriff bleibt auf dem Holzboden
-        this.physics.world.setBounds(100, 280, 600, 300);
-
-        // --- SPAWN FIX: Sheriff startet direkt bei der Tür im Hintergrund ---
-        this.player = this.physics.add.sprite(400, 320, 's_v', 1).setScale(0.4);
-        this.player.setCollideWorldBounds(true);
-        this.player.body.setSize(120, 60).setOffset(196, 430);
-
-        // --- EXIT FIX: Tür-Trigger an der Tür im Hintergrund ---
-        this.exitTrigger = this.add.rectangle(400, 300, 100, 50, 0x00ff00, 0);
-        this.physics.add.existing(this.exitTrigger, true);
-        
-        // Erst nach einer kurzen Zeit wird der Ausgang aktiv, damit man nicht sofort zurückteleportiert wird
-        this.exitActive = false;
-        this.time.delayedCall(1000, () => { this.exitActive = true; });
-
-        this.physics.add.overlap(this.player, this.exitTrigger, () => {
-            if (this.exitActive) this.scene.start('Overworld');
-        });
-
-        this.target = new Phaser.Math.Vector2(this.player.x, this.player.y);
-        this.isMoving = false;
-
-        this.input.on('pointerdown', (pointer) => {
-            this.target.copy(pointer);
-            this.physics.moveToObject(this.player, this.target, 200);
-            this.isMoving = true;
-        });
-        this.cameras.main.fadeIn(500);
-    }
-
-    update() {
-        if (this.isMoving) {
-            let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.target.x, this.target.y);
-            if (dist < 10) {
-                this.player.body.reset(this.target.x, this.target.y);
-                this.player.anims.stop(); this.player.setFrame(1);
-                this.isMoving = false;
-            } else {
-                let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.target.x, this.target.y);
-                let deg = Phaser.Math.RadToDeg(angle);
-                if (deg > -45 && deg <= 45) this.player.play('walk_r', true);
-                else if (deg > 45 && deg <= 135) this.player.play('walk_v', true);
-                else if (deg > -135 && deg <= -45) this.player.play('walk_h', true);
-                else this.player.play('walk_l', true);
-            }
-        }
-    }
-}
-
 const config = {
     type: Phaser.AUTO, width: 800, height: 600,
     physics: { default: 'arcade', arcade: { debug: false } },
-    scene: [Overworld, SaloonInside], pixelArt: true
+    scene: [Overworld], pixelArt: true
 };
 const game = new Phaser.Game(config);
 </script>
