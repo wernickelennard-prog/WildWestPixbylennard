@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Wild West Sheriff - Graphics Fix</title>
+    <title>Sheriff - Kaktus Scale Fix</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
@@ -17,73 +17,66 @@ class Overworld extends Phaser.Scene {
     constructor() { super('Overworld'); }
 
     preload() {
-        // Spritesheets für den Sheriff
         const frameConfig = { frameWidth: 512, frameHeight: 512 };
-        this.load.spritesheet('walk_v', 'Sheriff_spritesheet-vorne.png', frameConfig);
-        this.load.spritesheet('walk_h', 'Sheriff_spritesheet-hinten.png', frameConfig);
-        this.load.spritesheet('walk_r', 'Sheriff_spritesheet-rechts.png', frameConfig);
-        this.load.spritesheet('walk_l', 'Sheriff-spritesheet-links.png', frameConfig);
+        this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', frameConfig);
+        this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', frameConfig);
+        this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', frameConfig);
+        this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', frameConfig);
 
-        // Boden und Kugeln
         this.load.image('sand', 'Sand.png'); 
         this.load.image('bullet', 'Bullet.png');
         
-        // HIER SIND DIE FIXES FÜR DEINE DATEINAMEN:
-        this.load.image('kaktus1', 'Kaktus-.png'); 
-        this.load.image('kaktus2', 'Kaktus-anderer_art.png');
-        this.load.image('kaktus3', 'Kaktus-Kugel.png');
+        // Kakteen laden
+        this.load.image('k1', 'Kaktus-.png'); 
+        this.load.image('k2', 'Kaktus_anderer_art.png');
+        this.load.image('k3', 'Kaktus-Kugel.png');
     }
 
     create() {
         const worldSize = 2500;
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
+        this.background = this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2.5);
 
-        // Boden
-        this.background = this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand');
-        this.background.setTileScale(2.5);
-
-        // Kakteen-Gruppe
         this.obstacles = this.physics.add.staticGroup();
-        const kaktusTypen = ['kaktus1', 'kaktus2', 'kaktus3'];
+        const kTypes = ['k1', 'k2', 'k3'];
 
         for(let i = 0; i < 60; i++) {
             let x = Phaser.Math.Between(100, worldSize - 100);
             let y = Phaser.Math.Between(100, worldSize - 100);
-            let zufallKaktus = Phaser.Math.RND.pick(kaktusTypen);
+            let type = Phaser.Math.RND.pick(kTypes);
             
-            // Schatten unter den Kaktus setzen
-            this.add.ellipse(x, y + 30, 50, 20, 0x000000, 0.2);
+            // Schatten passend zur neuen Größe
+            this.add.ellipse(x, y + 20, 40, 15, 0x000000, 0.2);
 
-            let kaktus = this.obstacles.create(x, y, zufallKaktus);
-            kaktus.setScale(2).refreshBody();
+            let k = this.obstacles.create(x, y, type);
+            // FIX: Skalierung deutlich kleiner (0.5 statt 2)
+            k.setScale(0.5).refreshBody();
         }
 
-        // Sheriff
-        this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 'walk_v', 1).setScale(0.3);
+        this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 's_v', 1).setScale(0.3);
         this.player.setCollideWorldBounds(true);
-        // Hitbox anpassen: nur die Füße kollidieren
-        this.player.body.setSize(250, 150).setOffset(131, 350);
+        this.player.body.setSize(200, 120).setOffset(156, 380);
 
         // Animationen
-        const animSpeed = 8;
-        this.anims.create({ key: 'anim_v', frames: this.anims.generateFrameNumbers('walk_v'), frameRate: animSpeed, repeat: -1 });
-        this.anims.create({ key: 'anim_h', frames: this.anims.generateFrameNumbers('walk_h'), frameRate: animSpeed, repeat: -1 });
-        this.anims.create({ key: 'anim_r', frames: this.anims.generateFrameNumbers('walk_r'), frameRate: animSpeed, repeat: -1 });
-        this.anims.create({ key: 'anim_l', frames: this.anims.generateFrameNumbers('walk_l'), frameRate: animSpeed, repeat: -1 });
+        const dirs = [{k:'v',s:'s_v'},{k:'h',s:'s_h'},{k:'r',s:'s_r'},{k:'l',s:'s_l'}];
+        dirs.forEach(d => {
+            this.anims.create({
+                key: 'walk_' + d.k,
+                frames: this.anims.generateFrameNumbers(d.s, { start: 0, end: 2 }),
+                frameRate: 8,
+                repeat: -1
+            });
+        });
 
-        // Kamera & Kollision
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.physics.add.collider(this.player, this.obstacles);
 
-        // Steuerung
         this.targetPoint = new Phaser.Math.Vector2(this.player.x, this.player.y);
         this.isMoving = false;
         this.currentDir = 'v';
 
         this.input.on('pointerdown', (pointer) => {
-            // UI Check: Nicht laufen, wenn man FIRE drückt
             if (pointer.x > 270 && pointer.y > 540) return;
-
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
             this.targetPoint.x = worldPoint.x;
             this.targetPoint.y = worldPoint.y;
@@ -91,54 +84,54 @@ class Overworld extends Phaser.Scene {
             this.isMoving = true;
         });
 
-        // Schießen
         this.bullets = this.physics.add.group();
-        let shootBtn = this.add.circle(310, 590, 35, 0xff0000, 0.8).setInteractive().setScrollFactor(0);
-        this.add.text(285, 580, "FIRE", { fontSize: '16px', fill: '#fff', fontStyle: 'bold' }).setScrollFactor(0);
-        
-        shootBtn.on('pointerdown', () => this.shoot());
+        let btn = this.add.circle(310, 590, 35, 0xff0000, 0.8).setInteractive().setScrollFactor(0).setDepth(1000);
+        this.add.text(285, 580, "FIRE", { fontSize: '16px', fill: '#fff' }).setScrollFactor(0).setDepth(1001);
+        btn.on('pointerdown', () => this.shoot());
     }
 
     shoot() {
-        let bullet = this.bullets.create(this.player.x, this.player.y, 'bullet');
-        if (bullet) {
-            bullet.setScale(2);
-            let vx = 0, vy = 0, speed = 800;
-            if (this.currentDir === 'l') vx = -speed;
-            else if (this.currentDir === 'r') vx = speed;
-            else if (this.currentDir === 'h') vy = -speed;
-            else vy = speed;
-            bullet.body.setVelocity(vx, vy);
-            this.time.delayedCall(1000, () => bullet.destroy());
+        let b = this.bullets.create(this.player.x, this.player.y, 'bullet');
+        if (b) {
+            b.setScale(2);
+            let vx = 0, vy = 0, s = 800;
+            if (this.currentDir === 'l') vx = -s;
+            else if (this.currentDir === 'r') vx = s;
+            else if (this.currentDir === 'h') vy = -s;
+            else vy = s;
+            b.body.setVelocity(vx, vy);
+            this.time.delayedCall(1000, () => b.destroy());
         }
     }
 
     update() {
         if (this.isMoving) {
-            let distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
+            let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
             let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
             let deg = Phaser.Math.RadToDeg(angle);
 
-            if (distance < 10) {
+            if (dist < 10) {
                 this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
                 this.player.anims.stop();
                 this.player.setFrame(1);
                 this.isMoving = false;
             } else {
-                if (deg > -45 && deg <= 45) { this.player.play('anim_r', true); this.currentDir = 'r'; }
-                else if (deg > 45 && deg <= 135) { this.player.play('anim_v', true); this.currentDir = 'v'; }
-                else if (deg > -135 && deg <= -45) { this.player.play('anim_h', true); this.currentDir = 'h'; }
-                else { this.player.play('anim_l', true); this.currentDir = 'l'; }
+                if (deg > -45 && deg <= 45) { this.player.play('walk_r', true); this.currentDir = 'r'; }
+                else if (deg > 45 && deg <= 135) { this.player.play('walk_v', true); this.currentDir = 'v'; }
+                else if (deg > -135 && deg <= -45) { this.player.play('walk_h', true); this.currentDir = 'h'; }
+                else { this.player.play('walk_l', true); this.currentDir = 'l'; }
             }
         }
+        
+        // TIEFEN-SORTIERUNG (WICHTIG!)
         this.player.setDepth(this.player.y);
-        this.obstacles.getChildren().forEach(obj => obj.setDepth(obj.y));
+        this.obstacles.getChildren().forEach(o => o.setDepth(o.y));
     }
 }
 
 const config = {
     type: Phaser.AUTO, width: 360, height: 640,
-    physics: { default: 'arcade', arcade: { debug: false } },
+    physics: { default: 'arcade' },
     scene: [Overworld], pixelArt: true
 };
 const game = new Phaser.Game(config);
