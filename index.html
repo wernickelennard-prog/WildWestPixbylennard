@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - PNG Fix & Kakteen</title>
+    <title>Sheriff - Saloon Interior Fix</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; touch-action: none; }
@@ -23,13 +23,10 @@ class Overworld extends Phaser.Scene {
         this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
         this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', fConfig);
         this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', fConfig);
-        
         this.load.image('sand', 'Sand.png'); 
         this.load.image('k1', 'Kaktus-.png'); 
         this.load.image('k2', 'Kaktus_anderer_art.png');
         this.load.image('k3', 'Kaktus-Kugel.png');
-        
-        // FIX: Jetzt als .png laden!
         this.load.image('saloon_ext', 'Saloon-.png');
     }
 
@@ -37,25 +34,20 @@ class Overworld extends Phaser.Scene {
         const worldSize = 4000;
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
         this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2.5);
-
         this.obstacles = this.physics.add.staticGroup();
         const sX = 3500, sY = 600;
 
-        // Schatten-Vignette unter dem Saloon für besseren Übergang
-        for(let i = 1; i <= 3; i++) {
-            this.add.rectangle(sX, sY + 300, 950 + (i*20), 100 + (i*10), 0x000000, 0.1).setOrigin(0.5);
-        }
-
+        // Schatten unter dem Saloon
+        this.add.rectangle(sX, sY + 300, 950, 100, 0x000000, 0.2).setOrigin(0.5);
         this.saloon = this.obstacles.create(sX, sY, 'saloon_ext').setScale(1.2).refreshBody();
         this.saloon.body.setSize(this.saloon.width, 250).setOffset(0, this.saloon.height - 250);
 
-        // KAKTEEN-SCHLEIFE (fest eingebaut)
+        // Kakteen
         const kTypes = ['k1', 'k2', 'k3'];
         for(let i = 0; i < 80; i++) {
             let x = Phaser.Math.Between(200, worldSize - 200);
             let y = Phaser.Math.Between(200, worldSize - 200);
-            
-            if (Phaser.Math.Distance.Between(x, y, sX, sY) > 450 || y > sY + 320) {
+            if (Phaser.Math.Distance.Between(x, y, sX, sY) > 450) {
                 let k = this.obstacles.create(x, y, Phaser.Math.RND.pick(kTypes));
                 k.setScale(0.3).refreshBody();
                 k.body.setSize(60, 60).setOffset(k.width/2-30, k.height-80);
@@ -67,7 +59,6 @@ class Overworld extends Phaser.Scene {
 
         this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 's_v', 1).setScale(0.25);
         this.player.body.setSize(120, 60).setOffset(196, 430);
-        
         this.createAnims();
 
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
@@ -122,29 +113,40 @@ class SaloonInside extends Phaser.Scene {
     constructor() { super('SaloonInside'); }
 
     preload() {
-        // FIX: Auch hier .png statt .jpg
         this.load.image('saloon_bg', 'imSaloon.png');
     }
 
     create() {
+        // Hintergrund skalieren und mittig im 800x600 Bereich
         const bg = this.add.image(400, 300, 'saloon_bg').setScale(1.2);
-        this.physics.world.setBounds(50, 100, 700, 450);
+        
+        // --- GEH-BEREICH FIX (Nicht mehr die Wand hochklettern) ---
+        // Der Sheriff kann sich nur zwischen y:350 (unten am Tresen) und y:580 bewegen
+        this.physics.world.setBounds(100, 350, 600, 230);
 
-        this.player = this.physics.add.sprite(400, 500, 's_h', 1).setScale(0.4);
+        // --- SPAWN FIX ---
+        // Startet ganz unten an der "Tür"
+        this.player = this.physics.add.sprite(400, 550, 's_h', 1).setScale(0.5);
         this.player.setCollideWorldBounds(true);
         this.player.body.setSize(120, 60).setOffset(196, 430);
 
-        this.exitTrigger = this.add.rectangle(400, 580, 200, 40, 0x000000, 0);
+        // --- EXIT FIX ---
+        // Trigger am unteren Rand
+        this.exitTrigger = this.add.rectangle(400, 595, 200, 20, 0xff0000, 0);
         this.physics.add.existing(this.exitTrigger, true);
-        this.physics.add.overlap(this.player, this.exitTrigger, () => this.scene.start('Overworld'));
+        this.physics.add.overlap(this.player, this.exitTrigger, () => {
+            this.scene.start('Overworld');
+        });
 
         this.target = new Phaser.Math.Vector2(this.player.x, this.player.y);
+        this.isMoving = false;
+
         this.input.on('pointerdown', (pointer) => {
             this.target.copy(pointer);
             this.physics.moveToObject(this.player, this.target, 200);
             this.isMoving = true;
         });
-        this.cameras.main.fadeIn(500, 0, 0, 0);
+        this.cameras.main.fadeIn(500);
     }
 
     update() {
