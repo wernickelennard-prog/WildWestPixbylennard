@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Notfall Fix</title>
+    <title>Sheriff Fix</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
@@ -17,7 +17,7 @@ class Overworld extends Phaser.Scene {
     constructor() { super('Overworld'); }
 
     preload() {
-        // Wir laden die Bilder als einfache Bilder ohne Animation, um Fehler zu vermeiden
+        // FIX: Wir laden die Bilder als einfache Images, damit sie NICHT zerschnitten werden.
         this.load.image('s_v', 'Sheriff_spritesheet-vorne.png');
         this.load.image('s_h', 'Sheriff_spritesheet-hinten.png');
         this.load.image('s_r', 'Sheriff_spritesheet-rechts.png');
@@ -33,30 +33,35 @@ class Overworld extends Phaser.Scene {
     create() {
         const worldSize = 2000;
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
-        this.background = this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2);
+        this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2);
 
-        // KAKTEEN: Wir setzen sie GANZ KLEIN (0.2), damit sie nicht alles verdecken
         this.obstacles = this.physics.add.staticGroup();
         const kTypes = ['k1', 'k2', 'k3'];
+
+        // Kakteen-Platzierung mit SCHALER Hitbox
         for(let i = 0; i < 15; i++) {
-            let x = Phaser.Math.Between(200, 1800);
-            let y = Phaser.Math.Between(200, 1800);
-            let type = Phaser.Math.RND.pick(kTypes);
-            let k = this.obstacles.create(x, y, type);
-            if(k) {
-                k.setScale(0.2).refreshBody(); // Winzige Skalierung, damit sie zum Sheriff passen
-            }
+            let x = Phaser.Math.Between(300, 1700);
+            let y = Phaser.Math.Between(300, 1700);
+            let k = this.obstacles.create(x, y, Phaser.Math.RND.pick(kTypes));
+            
+            // Kaktus-Skalierung auf eine normale Größe
+            k.setScale(0.4); 
+            // Die Hitbox wird GANZ KLEIN gemacht (nur im Zentrum des Kaktus)
+            k.body.setSize(100, 100); 
+            k.refreshBody();
         }
 
-        // SHERIFF: Wir laden ihn ohne Zerschneiden
-        this.player = this.physics.add.sprite(1000, 1000, 's_v').setScale(0.2);
+        // Sheriff-Fix: Ganze Grafik ohne Zerschneiden
+        this.player = this.physics.add.sprite(1000, 1000, 's_v').setScale(0.4);
+        
+        // Hitbox nur an den FÜSSEN (ganz klein), damit du überall durchkommst
+        this.player.body.setSize(100, 50).setOffset(200, 450);
         this.player.setCollideWorldBounds(true);
 
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.physics.add.collider(this.player, this.obstacles);
 
         this.targetPoint = new Phaser.Math.Vector2(1000, 1000);
-
         this.input.on('pointerdown', (pointer) => {
             if (pointer.x > 270 && pointer.y > 540) return;
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
@@ -64,33 +69,15 @@ class Overworld extends Phaser.Scene {
             this.targetPoint.y = worldPoint.y;
             this.physics.moveToObject(this.player, this.targetPoint, 250);
         });
-
-        this.bullets = this.physics.add.group();
-        let btn = this.add.circle(310, 590, 35, 0xff0000, 0.8).setInteractive().setScrollFactor(0).setDepth(1000);
-        this.add.text(285, 580, "FIRE", { fontSize: '16px', fill: '#fff' }).setScrollFactor(0).setDepth(1001);
-        btn.on('pointerdown', () => this.shoot());
-    }
-
-    shoot() {
-        let b = this.bullets.create(this.player.x, this.player.y, 'bullet');
-        if (b) {
-            b.setScale(2);
-            let vx = 0, vy = 0, s = 800;
-            // Schussrichtung bestimmen
-            if (this.player.texture.key === 's_l') vx = -s;
-            else if (this.player.texture.key === 's_r') vx = s;
-            else if (this.player.texture.key === 's_h') vy = -s;
-            else vy = s;
-            b.body.setVelocity(vx, vy);
-            this.time.delayedCall(1000, () => b.destroy());
-        }
     }
 
     update() {
         let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
+        
         if (dist < 10) {
             this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
         } else {
+            // Richtung wecheln durch Tauschen des ganzen Bildes
             let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
             let deg = Phaser.Math.RadToDeg(angle);
 
@@ -99,13 +86,19 @@ class Overworld extends Phaser.Scene {
             else if (deg > -135 && deg <= -45) this.player.setTexture('s_h');
             else this.player.setTexture('s_l');
         }
+        
+        // Depth-Sortierung: Wer weiter "unten" ist, steht vorne
         this.player.setDepth(this.player.y);
+        this.obstacles.getChildren().forEach(o => o.setDepth(o.y));
     }
 }
 
 const config = {
     type: Phaser.AUTO, width: 360, height: 640,
-    physics: { default: 'arcade' },
+    physics: { 
+        default: 'arcade',
+        arcade: { debug: false } // Wir schalten Debug aus, damit die lila Linien weg sind
+    },
     scene: [Overworld], pixelArt: true
 };
 const game = new Phaser.Game(config);
