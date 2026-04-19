@@ -27,7 +27,7 @@ class Overworld extends Phaser.Scene {
         this.load.image('k1', 'Kaktus-.png'); 
         this.load.image('k2', 'Kaktus_anderer_art.png');
         this.load.image('k3', 'Kaktus-Kugel.png');
-        this.load.image('saloon_ext', 'Saloon-.jpg');
+        this.load.image('saloon_ext', 'Saloon-.png');
     }
 
     create() {
@@ -124,7 +124,7 @@ class SaloonInside extends Phaser.Scene {
     constructor() { super('SaloonInside'); }
 
     preload() {
-        this.load.image('saloon_bg', 'imSaloon.jpg');
+        this.load.image('saloon_bg', 'imSaloon.png');
         const fConfig = { frameWidth: 512, frameHeight: 512 };
         this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', fConfig);
         this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
