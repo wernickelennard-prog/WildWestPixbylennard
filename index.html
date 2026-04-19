@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Rettung</title>
+    <title>Westerpix</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
@@ -17,12 +17,12 @@ class Overworld extends Phaser.Scene {
     constructor() { super('Overworld'); }
 
     preload() {
-        // Wir laden die Bilder. Wenn ein Bild nur 1 Frame hat, ist das jetzt okay.
-        const fConfig = { frameWidth: 512, frameHeight: 512 };
-        this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', fConfig);
-        this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
-        this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', fConfig);
-        this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', fConfig);
+        // Wir laden die Bilder als einfache Bilder (keine Spritesheets), 
+        // um den "Zerschnitten"-Bug zu stoppen, bis wir die Maße haben.
+        this.load.image('s_v', 'Sheriff_spritesheet-vorne.png');
+        this.load.image('s_h', 'Sheriff_spritesheet-hinten.png');
+        this.load.image('s_r', 'Sheriff_spritesheet-rechts.png');
+        this.load.image('s_l', 'Sheriff-spritesheet-links.png');
 
         this.load.image('sand', 'Sand.png'); 
         this.load.image('bullet', 'Bullet.png');
@@ -36,41 +36,25 @@ class Overworld extends Phaser.Scene {
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
         this.background = this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2);
 
-        // KAKTEEN-RETTUNG: Nur noch 10 Kakteen statt 60!
+        // KAKTEEN: Wir setzen nur 8 Stück, damit sie nicht nerven
         this.obstacles = this.physics.add.staticGroup();
         const kTypes = ['k1', 'k2', 'k3'];
-        for(let i = 0; i < 10; i++) {
-            let x = Phaser.Math.Between(200, worldSize - 200);
-            let y = Phaser.Math.Between(200, worldSize - 200);
+        for(let i = 0; i < 8; i++) {
+            let x = Phaser.Math.Between(300, 1700);
+            let y = Phaser.Math.Between(300, 1700);
             let type = Phaser.Math.RND.pick(kTypes);
             let k = this.obstacles.create(x, y, type);
-            if (k) {
-                k.setScale(1).refreshBody(); // Normale Größe
-                this.add.ellipse(x, y + 25, 40, 15, 0x000000, 0.2).setDepth(y - 1);
-            }
+            if(k) k.setScale(1).refreshBody(); 
         }
 
-        // Sheriff (Start-Frame 0)
-        this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 's_v', 0).setScale(0.3);
+        // SHERIFF: Wir laden ihn als einfaches Bild (keine Animation), damit er ganz bleibt
+        this.player = this.physics.add.sprite(1000, 1000, 's_v').setScale(0.3);
         this.player.setCollideWorldBounds(true);
-        this.player.body.setSize(200, 120).setOffset(156, 380);
-
-        // ANIMATIONS-FIX: Wir prüfen, ob deine Sheets wirklich 3 Frames haben
-        const dirs = [{k:'v',s:'s_v'},{k:'h',s:'s_h'},{k:'r',s:'s_r'},{k:'l',s:'s_l'}];
-        dirs.forEach(d => {
-            this.anims.create({
-                key: 'walk_' + d.k,
-                frames: this.anims.generateFrameNumbers(d.s, { start: 0, end: 0 }), // Erstmal nur 1 Bild, um Fehler zu vermeiden
-                frameRate: 1,
-                repeat: -1
-            });
-        });
 
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.physics.add.collider(this.player, this.obstacles);
 
-        this.targetPoint = new Phaser.Math.Vector2(this.player.x, this.player.y);
-        this.isMoving = false;
+        this.targetPoint = new Phaser.Math.Vector2(1000, 1000);
         this.currentDir = 'v';
 
         this.input.on('pointerdown', (pointer) => {
@@ -79,9 +63,9 @@ class Overworld extends Phaser.Scene {
             this.targetPoint.x = worldPoint.x;
             this.targetPoint.y = worldPoint.y;
             this.physics.moveToObject(this.player, this.targetPoint, 200);
-            this.isMoving = true;
         });
 
+        // Schießen
         this.bullets = this.physics.add.group();
         let btn = this.add.circle(310, 590, 35, 0xff0000, 0.8).setInteractive().setScrollFactor(0).setDepth(1000);
         this.add.text(285, 580, "FIRE", { fontSize: '16px', fill: '#fff' }).setScrollFactor(0).setDepth(1001);
@@ -96,31 +80,27 @@ class Overworld extends Phaser.Scene {
             if (this.currentDir === 'l') vx = -s;
             else if (this.currentDir === 'r') vx = s;
             else if (this.currentDir === 'h') vy = -s;
-            else vy = s;
+            else vy = speed = 800;
             b.body.setVelocity(vx, vy);
             this.time.delayedCall(1000, () => b.destroy());
         }
     }
 
     update() {
-        if (this.isMoving) {
-            let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
+        let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
+        if (dist < 10) {
+            this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
+        } else {
+            // Richtung wecheln ohne Animation (einfach das Bild tauschen)
             let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
             let deg = Phaser.Math.RadToDeg(angle);
 
-            if (dist < 10) {
-                this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
-                this.player.anims.stop();
-                this.isMoving = false;
-            } else {
-                if (deg > -45 && deg <= 45) { this.player.play('walk_r', true); this.currentDir = 'r'; }
-                else if (deg > 45 && deg <= 135) { this.player.play('walk_v', true); this.currentDir = 'v'; }
-                else if (deg > -135 && deg <= -45) { this.player.play('walk_h', true); this.currentDir = 'h'; }
-                else { this.player.play('walk_l', true); this.currentDir = 'l'; }
-            }
+            if (deg > -45 && deg <= 45) { this.player.setTexture('s_r'); this.currentDir = 'r'; }
+            else if (deg > 45 && deg <= 135) { this.player.setTexture('s_v'); this.currentDir = 'v'; }
+            else if (deg > -135 && deg <= -45) { this.player.setTexture('s_h'); this.currentDir = 'h'; }
+            else { this.player.setTexture('s_l'); this.currentDir = 'l'; }
         }
         this.player.setDepth(this.player.y);
-        this.obstacles.getChildren().forEach(o => o.setDepth(o.y));
     }
 }
 
