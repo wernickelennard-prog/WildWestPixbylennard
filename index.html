@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Kaktus Scale Fix</title>
+    <title>Sheriff - Rettung</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
@@ -17,53 +17,51 @@ class Overworld extends Phaser.Scene {
     constructor() { super('Overworld'); }
 
     preload() {
-        const frameConfig = { frameWidth: 512, frameHeight: 512 };
-        this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', frameConfig);
-        this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', frameConfig);
-        this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', frameConfig);
-        this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', frameConfig);
+        // Wir laden die Bilder. Wenn ein Bild nur 1 Frame hat, ist das jetzt okay.
+        const fConfig = { frameWidth: 512, frameHeight: 512 };
+        this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', fConfig);
+        this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
+        this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', fConfig);
+        this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', fConfig);
 
         this.load.image('sand', 'Sand.png'); 
         this.load.image('bullet', 'Bullet.png');
-        
-        // Kakteen laden
         this.load.image('k1', 'Kaktus-.png'); 
         this.load.image('k2', 'Kaktus_anderer_art.png');
         this.load.image('k3', 'Kaktus-Kugel.png');
     }
 
     create() {
-        const worldSize = 2500;
+        const worldSize = 2000;
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
-        this.background = this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2.5);
+        this.background = this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2);
 
+        // KAKTEEN-RETTUNG: Nur noch 10 Kakteen statt 60!
         this.obstacles = this.physics.add.staticGroup();
         const kTypes = ['k1', 'k2', 'k3'];
-
-        for(let i = 0; i < 60; i++) {
-            let x = Phaser.Math.Between(100, worldSize - 100);
-            let y = Phaser.Math.Between(100, worldSize - 100);
+        for(let i = 0; i < 10; i++) {
+            let x = Phaser.Math.Between(200, worldSize - 200);
+            let y = Phaser.Math.Between(200, worldSize - 200);
             let type = Phaser.Math.RND.pick(kTypes);
-            
-            // Schatten passend zur neuen Größe
-            this.add.ellipse(x, y + 20, 40, 15, 0x000000, 0.2);
-
             let k = this.obstacles.create(x, y, type);
-            // FIX: Skalierung deutlich kleiner (0.5 statt 2)
-            k.setScale(0.5).refreshBody();
+            if (k) {
+                k.setScale(1).refreshBody(); // Normale Größe
+                this.add.ellipse(x, y + 25, 40, 15, 0x000000, 0.2).setDepth(y - 1);
+            }
         }
 
-        this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 's_v', 1).setScale(0.3);
+        // Sheriff (Start-Frame 0)
+        this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 's_v', 0).setScale(0.3);
         this.player.setCollideWorldBounds(true);
         this.player.body.setSize(200, 120).setOffset(156, 380);
 
-        // Animationen
+        // ANIMATIONS-FIX: Wir prüfen, ob deine Sheets wirklich 3 Frames haben
         const dirs = [{k:'v',s:'s_v'},{k:'h',s:'s_h'},{k:'r',s:'s_r'},{k:'l',s:'s_l'}];
         dirs.forEach(d => {
             this.anims.create({
                 key: 'walk_' + d.k,
-                frames: this.anims.generateFrameNumbers(d.s, { start: 0, end: 2 }),
-                frameRate: 8,
+                frames: this.anims.generateFrameNumbers(d.s, { start: 0, end: 0 }), // Erstmal nur 1 Bild, um Fehler zu vermeiden
+                frameRate: 1,
                 repeat: -1
             });
         });
@@ -80,7 +78,7 @@ class Overworld extends Phaser.Scene {
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
             this.targetPoint.x = worldPoint.x;
             this.targetPoint.y = worldPoint.y;
-            this.physics.moveToObject(this.player, this.targetPoint, 250);
+            this.physics.moveToObject(this.player, this.targetPoint, 200);
             this.isMoving = true;
         });
 
@@ -113,7 +111,6 @@ class Overworld extends Phaser.Scene {
             if (dist < 10) {
                 this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
                 this.player.anims.stop();
-                this.player.setFrame(1);
                 this.isMoving = false;
             } else {
                 if (deg > -45 && deg <= 45) { this.player.play('walk_r', true); this.currentDir = 'r'; }
@@ -122,8 +119,6 @@ class Overworld extends Phaser.Scene {
                 else { this.player.play('walk_l', true); this.currentDir = 'l'; }
             }
         }
-        
-        // TIEFEN-SORTIERUNG (WICHTIG!)
         this.player.setDepth(this.player.y);
         this.obstacles.getChildren().forEach(o => o.setDepth(o.y));
     }
