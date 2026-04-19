@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Wild West Sheriff - Sand & Kakteen</title>
+    <title>Wild West Sheriff - Next Level</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
@@ -19,63 +19,79 @@ class Overworld extends Phaser.Scene {
     }
 
     preload() {
-        // Deine neuen Assets laden
         this.load.image('sheriff', 'Sheriff.png');
         this.load.image('sand', 'Sand.png'); 
         this.load.image('kaktus', 'Kaktus.png');
     }
 
     create() {
-        // 1. BODEN (TileSprite wiederholt deine Sand.png Grafik)
-        // Wir machen die Fläche etwas größer als den Screen
-        this.background = this.add.tileSprite(180, 320, 360, 640, 'sand');
-        // Damit der kleine Sand-Pixel-Block nicht verschwommen wirkt:
-        this.background.setTileScale(2); 
+        // 1. WELT-GRÖSSE (Wir machen die Welt größer als den Bildschirm)
+        const worldWidth = 1000;
+        const worldHeight = 1000;
+        this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
 
-        // 2. HINDERNISSE (Kaktus-Gruppe)
+        // 2. BODEN
+        this.background = this.add.tileSprite(worldWidth/2, worldHeight/2, worldWidth, worldHeight, 'sand');
+        this.background.setTileScale(2.5); 
+
+        // 3. SCHATTEN-GRUPPE (Einfache graue Kreise unter den Objekten)
+        this.shadows = this.add.group();
+
+        // 4. HINDERNISSE
         this.obstacles = this.physics.add.staticGroup();
+        
+        // Wir platzieren Kakteen und geben ihnen Schatten
+        const kaktusPositions = [
+            {x: 200, y: 300}, {x: 500, y: 200}, {x: 800, y: 600}, {x: 300, y: 800}
+        ];
 
-        // Wir verteilen ein paar deiner Kakteen in der Welt
-        this.obstacles.create(80, 150, 'kaktus').setScale(2).refreshBody();
-        this.obstacles.create(280, 200, 'kaktus').setScale(2.5).refreshBody();
-        this.obstacles.create(180, 500, 'kaktus').setScale(2).refreshBody();
-
-        // 3. DER SHERIFF
-        this.player = this.physics.add.sprite(180, 320, 'sheriff').setScale(0.15);
-        this.player.setCollideWorldBounds(true);
-
-        // Hitbox für die Füße (Präzises Laufen zwischen Kakteen)
-        this.player.body.setSize(this.player.width * 0.5, this.player.height * 0.3);
-        this.player.body.setOffset(this.player.width * 0.25, this.player.height * 0.7);
-
-        // 4. KOLLISION: Sheriff stößt gegen Kakteen
-        this.physics.add.collider(this.player, this.obstacles);
-
-        // Bewegungs-Logik
-        this.targetPoint = new Phaser.Math.Vector2(180, 320);
-
-        // 5. STEUERUNG (Click-to-Move)
-        this.input.on('pointerdown', (pointer) => {
-            this.targetPoint.x = pointer.x;
-            this.targetPoint.y = pointer.y;
-            this.physics.moveToObject(this.player, this.targetPoint, 180);
+        kaktusPositions.forEach(pos => {
+            // Schatten unter Kaktus
+            let s = this.add.ellipse(pos.x, pos.y + 40, 60, 20, 0x000000, 0.2);
+            this.obstacles.create(pos.x, pos.y, 'kaktus').setScale(2).refreshBody();
         });
 
-        // Dialog-Box (für später)
-        this.dialogText = this.add.text(20, 580, "", { 
-            fontSize: '14px', fill: '#fff', backgroundColor: '#000', padding: { x: 5, y: 5 }
-        }).setAlpha(0).setDepth(2000);
+        // 5. DER SHERIFF & SEIN SCHATTEN
+        this.playerShadow = this.add.ellipse(0, 0, 40, 15, 0x000000, 0.3);
+        this.player = this.physics.add.sprite(500, 500, 'sheriff').setScale(0.2);
+        this.player.setCollideWorldBounds(true);
+
+        // Präzise Hitbox
+        this.player.body.setSize(this.player.width * 0.5, this.player.height * 0.2);
+        this.player.body.setOffset(this.player.width * 0.25, this.player.height * 0.8);
+
+        this.physics.add.collider(this.player, this.obstacles);
+
+        // 6. KAMERA (Folgt dem Sheriff)
+        this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+        this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+
+        this.targetPoint = new Phaser.Math.Vector2(500, 500);
+
+        // 7. STEUERUNG
+        this.input.on('pointerdown', (pointer) => {
+            // Umrechnung von Bildschirm-Klick zu Welt-Position
+            const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+            this.targetPoint.x = worldPoint.x;
+            this.targetPoint.y = worldPoint.y;
+            this.physics.moveToObject(this.player, this.targetPoint, 200);
+        });
     }
 
     update() {
-        // Stoppen wenn Ziel erreicht
+        // Schatten dem Spieler folgen lassen
+        this.playerShadow.x = this.player.x;
+        this.playerShadow.y = this.player.y + 45;
+
+        // Stopp-Logik
         let distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
-        if (this.player.body.speed > 0 && distance < 7) {
+        if (this.player.body.speed > 0 && distance < 10) {
             this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
         }
 
-        // TIEFEN-SORTIERUNG: Wer weiter unten ist, steht "vor" dem anderen
+        // Tiefen-Sortierung
         this.player.setDepth(this.player.y);
+        this.playerShadow.setDepth(this.player.y - 1);
         this.obstacles.getChildren().forEach(kaktus => {
             kaktus.setDepth(kaktus.y);
         });
@@ -86,12 +102,9 @@ const config = {
     type: Phaser.AUTO,
     width: 360,
     height: 640,
-    physics: {
-        default: 'arcade',
-        arcade: { debug: false } // Auf true stellen, um die lila Hitboxen zu sehen
-    },
+    physics: { default: 'arcade', arcade: { debug: false } },
     scene: [Overworld],
-    pixelArt: true // Behält die scharfen Pixelkanten bei
+    pixelArt: true
 };
 
 const game = new Phaser.Game(config);
