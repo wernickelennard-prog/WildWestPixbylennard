@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Wild West Sheriff - Overworld</title>
+    <title>Wild West Sheriff - Sand & Kakteen</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
@@ -13,112 +13,85 @@
 <body>
 
 <script>
-// --- SZENE 1: DIE STADT (OVERWORLD) ---
 class Overworld extends Phaser.Scene {
     constructor() {
         super('Overworld');
     }
 
     preload() {
-        // Lade dein Sheriff-Bild
-        // Stelle sicher, dass Sheriff.png im gleichen Ordner liegt
+        // Deine neuen Assets laden
         this.load.image('sheriff', 'Sheriff.png');
+        this.load.image('sand', 'Sand.png'); 
+        this.load.image('kaktus', 'Kaktus.png');
     }
 
     create() {
-        // Hintergrundfarbe: Wüstensand
-        this.cameras.main.setBackgroundColor('#d2b48c');
+        // 1. BODEN (TileSprite wiederholt deine Sand.png Grafik)
+        // Wir machen die Fläche etwas größer als den Screen
+        this.background = this.add.tileSprite(180, 320, 360, 640, 'sand');
+        // Damit der kleine Sand-Pixel-Block nicht verschwommen wirkt:
+        this.background.setTileScale(2); 
 
-        // 1. DER SHERIFF
-        // Wir platzieren ihn und verkleinern das 1024px Bild auf eine spielbare Größe
-        this.player = this.physics.add.sprite(180, 400, 'sheriff').setScale(0.15);
+        // 2. HINDERNISSE (Kaktus-Gruppe)
+        this.obstacles = this.physics.add.staticGroup();
+
+        // Wir verteilen ein paar deiner Kakteen in der Welt
+        this.obstacles.create(80, 150, 'kaktus').setScale(2).refreshBody();
+        this.obstacles.create(280, 200, 'kaktus').setScale(2.5).refreshBody();
+        this.obstacles.create(180, 500, 'kaktus').setScale(2).refreshBody();
+
+        // 3. DER SHERIFF
+        this.player = this.physics.add.sprite(180, 320, 'sheriff').setScale(0.15);
         this.player.setCollideWorldBounds(true);
 
-        // HITBOX ANPASSEN: Nur die Füße sollen kollidieren, nicht der Hut!
-        // Wir machen die Box schmaler und setzen sie nach unten
-        this.player.body.setSize(this.player.width * 0.6, this.player.height * 0.3);
-        this.player.body.setOffset(this.player.width * 0.2, this.player.height * 0.7);
+        // Hitbox für die Füße (Präzises Laufen zwischen Kakteen)
+        this.player.body.setSize(this.player.width * 0.5, this.player.height * 0.3);
+        this.player.body.setOffset(this.player.width * 0.25, this.player.height * 0.7);
 
-        // Ziel-Punkt für die Bewegung (Standardmäßig da, wo der Spieler startet)
-        this.targetPoint = new Phaser.Math.Vector2(180, 400);
+        // 4. KOLLISION: Sheriff stößt gegen Kakteen
+        this.physics.add.collider(this.player, this.obstacles);
 
-        // 2. INTERAKTIVE OBJEKTE (Platzhalter)
-        // Ein Fass (braunes Rechteck)
-        this.barrel = this.add.rectangle(100, 200, 50, 50, 0x654321).setInteractive();
-        this.add.text(80, 160, "Fass", { fontSize: '14px', color: '#000' });
+        // Bewegungs-Logik
+        this.targetPoint = new Phaser.Math.Vector2(180, 320);
 
-        // Ein Bandit-NPC (rotes Rechteck)
-        this.banditNPC = this.add.rectangle(250, 250, 40, 40, 0xff0000).setInteractive();
-        this.add.text(230, 210, "Bandit", { fontSize: '14px', color: '#000' });
-
-        // 3. DIALOG-SYSTEM
-        this.dialogText = this.add.text(20, 550, "", { 
-            fontSize: '16px', 
-            fill: '#ffffff', 
-            backgroundColor: '#000000',
-            padding: { x: 10, y: 10 },
-            wordWrap: { width: 320 }
-        }).setAlpha(0).setDepth(1000); // Dialog immer ganz oben anzeigen
-
-        // 4. STEUERUNG (KLICK/TAP)
+        // 5. STEUERUNG (Click-to-Move)
         this.input.on('pointerdown', (pointer) => {
-            // Prüfen: Haben wir den Banditen angeklickt?
-            if (this.banditNPC.getBounds().contains(pointer.x, pointer.y)) {
-                this.showDialog("Hände hoch, Bandit! Du kommst in den Knast.");
-                // Später: this.scene.start('BattleScene');
-            } 
-            // Prüfen: Haben wir das Fass angeklickt?
-            else if (this.barrel.getBounds().contains(pointer.x, pointer.y)) {
-                this.showDialog("Ein altes Holzfass. Leer.");
-            }
-            // Wenn nichts angeklickt wurde: Laufen
-            else {
-                this.targetPoint.x = pointer.x;
-                this.targetPoint.y = pointer.y;
-                // Bewege den Sheriff mit Geschwindigkeit 150 zum Klickpunkt
-                this.physics.moveToObject(this.player, this.targetPoint, 180);
-            }
+            this.targetPoint.x = pointer.x;
+            this.targetPoint.y = pointer.y;
+            this.physics.moveToObject(this.player, this.targetPoint, 180);
         });
-    }
 
-    // Hilfsfunktion für Dialoge
-    showDialog(message) {
-        this.dialogText.setText(message).setAlpha(1);
-        // Nach 2,5 Sekunden blendet der Text wieder aus
-        this.time.delayedCall(2500, () => {
-            this.dialogText.setAlpha(0);
-        });
+        // Dialog-Box (für später)
+        this.dialogText = this.add.text(20, 580, "", { 
+            fontSize: '14px', fill: '#fff', backgroundColor: '#000', padding: { x: 5, y: 5 }
+        }).setAlpha(0).setDepth(2000);
     }
 
     update() {
-        // Stopp-Logik: Wenn der Sheriff nah am Ziel ist, hör auf zu laufen
+        // Stoppen wenn Ziel erreicht
         let distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
-        
-        if (this.player.body.speed > 0) {
-            if (distance < 7) {
-                this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
-            }
+        if (this.player.body.speed > 0 && distance < 7) {
+            this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
         }
 
-        // TIEFEN-SORTIERUNG (Z-Index)
-        // Objekte mit höherem Y-Wert (weiter unten) werden VOR Objekten weiter oben gezeichnet
+        // TIEFEN-SORTIERUNG: Wer weiter unten ist, steht "vor" dem anderen
         this.player.setDepth(this.player.y);
-        this.barrel.setDepth(this.barrel.y);
-        this.banditNPC.setDepth(this.banditNPC.y);
+        this.obstacles.getChildren().forEach(kaktus => {
+            kaktus.setDepth(kaktus.y);
+        });
     }
 }
 
-// --- SPIEL-KONFIGURATION ---
 const config = {
     type: Phaser.AUTO,
     width: 360,
     height: 640,
     physics: {
         default: 'arcade',
-        arcade: { debug: false } // Auf 'true' stellen, um Hitboxen zu sehen
+        arcade: { debug: false } // Auf true stellen, um die lila Hitboxen zu sehen
     },
     scene: [Overworld],
-    pixelArt: true
+    pixelArt: true // Behält die scharfen Pixelkanten bei
 };
 
 const game = new Phaser.Game(config);
