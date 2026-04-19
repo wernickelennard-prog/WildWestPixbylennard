@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff Fix</title>
+    <title>Sheriff - Endgültiger Fix</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
@@ -17,11 +17,14 @@ class Overworld extends Phaser.Scene {
     constructor() { super('Overworld'); }
 
     preload() {
-        // FIX: Wir laden die Bilder als einfache Images, damit sie NICHT zerschnitten werden.
-        this.load.image('s_v', 'Sheriff_spritesheet-vorne.png');
-        this.load.image('s_h', 'Sheriff_spritesheet-hinten.png');
-        this.load.image('s_r', 'Sheriff_spritesheet-rechts.png');
-        this.load.image('s_l', 'Sheriff-spritesheet-links.png');
+        // Da dein Bild 3 Sheriffs nebeneinander zeigt (1536 Pixel breit), 
+        // müssen wir frameWidth auf 512 setzen (1536 geteilt durch 3).
+        const fConfig = { frameWidth: 512, frameHeight: 512 };
+        
+        this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', fConfig);
+        this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
+        this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', fConfig);
+        this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', fConfig);
 
         this.load.image('sand', 'Sand.png'); 
         this.load.image('bullet', 'Bullet.png');
@@ -38,25 +41,33 @@ class Overworld extends Phaser.Scene {
         this.obstacles = this.physics.add.staticGroup();
         const kTypes = ['k1', 'k2', 'k3'];
 
-        // Kakteen-Platzierung mit SCHALER Hitbox
+        // Kakteen klein und mit passender Hitbox
         for(let i = 0; i < 15; i++) {
             let x = Phaser.Math.Between(300, 1700);
             let y = Phaser.Math.Between(300, 1700);
             let k = this.obstacles.create(x, y, Phaser.Math.RND.pick(kTypes));
-            
-            // Kaktus-Skalierung auf eine normale Größe
-            k.setScale(0.4); 
-            // Die Hitbox wird GANZ KLEIN gemacht (nur im Zentrum des Kaktus)
-            k.body.setSize(100, 100); 
-            k.refreshBody();
+            k.setScale(0.3).refreshBody();
+            // Winzige Hitbox, damit man nicht hängen bleibt
+            k.body.setSize(100, 100);
         }
 
-        // Sheriff-Fix: Ganze Grafik ohne Zerschneiden
-        this.player = this.physics.add.sprite(1000, 1000, 's_v').setScale(0.4);
+        // Sheriff Fix: Wir nehmen Frame 1 (den mittleren Sheriff), der hat Füße!
+        this.player = this.physics.add.sprite(1000, 1000, 's_v', 1).setScale(0.3);
         
-        // Hitbox nur an den FÜSSEN (ganz klein), damit du überall durchkommst
-        this.player.body.setSize(100, 50).setOffset(200, 450);
+        // Hitbox nur an den Füßen (lila Kasten klein machen)
+        this.player.body.setSize(150, 80).setOffset(180, 420);
         this.player.setCollideWorldBounds(true);
+
+        // Geh-Animationen erstellen (Frame 0, 1, 2)
+        const dirs = [{k:'v',s:'s_v'},{k:'h',s:'s_h'},{k:'r',s:'s_r'},{k:'l',s:'s_l'}];
+        dirs.forEach(d => {
+            this.anims.create({
+                key: 'walk_' + d.k,
+                frames: this.anims.generateFrameNumbers(d.s, { start: 0, end: 2 }),
+                frameRate: 8,
+                repeat: -1
+            });
+        });
 
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.physics.add.collider(this.player, this.obstacles);
@@ -68,28 +79,29 @@ class Overworld extends Phaser.Scene {
             this.targetPoint.x = worldPoint.x;
             this.targetPoint.y = worldPoint.y;
             this.physics.moveToObject(this.player, this.targetPoint, 250);
+            
+            // Animation starten
+            let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
+            let deg = Phaser.Math.RadToDeg(angle);
+            this.playCorrectAnim(deg);
         });
+    }
+
+    playCorrectAnim(deg) {
+        if (deg > -45 && deg <= 45) this.player.play('walk_r', true);
+        else if (deg > 45 && deg <= 135) this.player.play('walk_v', true);
+        else if (deg > -135 && deg <= -45) this.player.play('walk_h', true);
+        else this.player.play('walk_l', true);
     }
 
     update() {
         let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
-        
         if (dist < 10) {
             this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
-        } else {
-            // Richtung wecheln durch Tauschen des ganzen Bildes
-            let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
-            let deg = Phaser.Math.RadToDeg(angle);
-
-            if (deg > -45 && deg <= 45) this.player.setTexture('s_r');
-            else if (deg > 45 && deg <= 135) this.player.setTexture('s_v');
-            else if (deg > -135 && deg <= -45) this.player.setTexture('s_h');
-            else this.player.setTexture('s_l');
+            this.player.anims.stop();
+            this.player.setFrame(1); // Stehen bleiben mit Füßen
         }
-        
-        // Depth-Sortierung: Wer weiter "unten" ist, steht vorne
         this.player.setDepth(this.player.y);
-        this.obstacles.getChildren().forEach(o => o.setDepth(o.y));
     }
 }
 
@@ -97,7 +109,7 @@ const config = {
     type: Phaser.AUTO, width: 360, height: 640,
     physics: { 
         default: 'arcade',
-        arcade: { debug: false } // Wir schalten Debug aus, damit die lila Linien weg sind
+        arcade: { debug: false } // Debug aus, damit das Spiel sauber aussieht
     },
     scene: [Overworld], pixelArt: true
 };
