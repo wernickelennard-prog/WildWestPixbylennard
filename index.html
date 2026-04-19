@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Endgültiger Fix</title>
+    <title>Sheriff - Hitbox & Open World Fix</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
@@ -17,10 +17,8 @@ class Overworld extends Phaser.Scene {
     constructor() { super('Overworld'); }
 
     preload() {
-        // Da dein Bild 3 Sheriffs nebeneinander zeigt (1536 Pixel breit), 
-        // müssen wir frameWidth auf 512 setzen (1536 geteilt durch 3).
+        // Spritesheets mit 512x512 laden (behält deine Animationen bei)
         const fConfig = { frameWidth: 512, frameHeight: 512 };
-        
         this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', fConfig);
         this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
         this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', fConfig);
@@ -34,31 +32,38 @@ class Overworld extends Phaser.Scene {
     }
 
     create() {
-        const worldSize = 2000;
+        // OPEN WORLD: Wir machen die Welt groß
+        const worldSize = 3000;
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
-        this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2);
+        this.background = this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2.5);
 
         this.obstacles = this.physics.add.staticGroup();
         const kTypes = ['k1', 'k2', 'k3'];
 
-        // Kakteen klein und mit passender Hitbox
-        for(let i = 0; i < 15; i++) {
-            let x = Phaser.Math.Between(300, 1700);
-            let y = Phaser.Math.Between(300, 1700);
+        for(let i = 0; i < 40; i++) {
+            let x = Phaser.Math.Between(100, worldSize - 100);
+            let y = Phaser.Math.Between(100, worldSize - 100);
             let k = this.obstacles.create(x, y, Phaser.Math.RND.pick(kTypes));
-            k.setScale(0.3).refreshBody();
-            // Winzige Hitbox, damit man nicht hängen bleibt
-            k.body.setSize(100, 100);
+            
+            // --- HITBOX FIX FÜR KAKTEEN ---
+            k.setScale(0.3);
+            // Wir machen die Hitbox nur 40 Pixel breit (nur der Stamm), 
+            // damit man nicht hängen bleibt, wenn man daneben läuft
+            k.body.setSize(40, 40);
+            k.body.setOffset(236, 236); // Zentriert die kleine Hitbox
+            k.refreshBody();
+            
+            // Kleiner Schatten am Boden für die Optik
+            this.add.ellipse(x, y + 20, 40, 15, 0x000000, 0.2).setDepth(y - 1);
         }
 
-        // Sheriff Fix: Wir nehmen Frame 1 (den mittleren Sheriff), der hat Füße!
-        this.player = this.physics.add.sprite(1000, 1000, 's_v', 1).setScale(0.3);
-        
-        // Hitbox nur an den Füßen (lila Kasten klein machen)
-        this.player.body.setSize(150, 80).setOffset(180, 420);
+        // Sheriff (Wir lassen die Animationseinstellungen so wie sie sind)
+        this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 's_v', 1).setScale(0.3);
+        // Sheriff Hitbox schmaler machen, damit er zwischen Kakteen durchpasst
+        this.player.body.setSize(100, 60).setOffset(206, 420);
         this.player.setCollideWorldBounds(true);
 
-        // Geh-Animationen erstellen (Frame 0, 1, 2)
+        // Animationen (wie von dir gewünscht unverändert in der Logik)
         const dirs = [{k:'v',s:'s_v'},{k:'h',s:'s_h'},{k:'r',s:'s_r'},{k:'l',s:'s_l'}];
         dirs.forEach(d => {
             this.anims.create({
@@ -72,36 +77,41 @@ class Overworld extends Phaser.Scene {
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.physics.add.collider(this.player, this.obstacles);
 
-        this.targetPoint = new Phaser.Math.Vector2(1000, 1000);
+        this.targetPoint = new Phaser.Math.Vector2(this.player.x, this.player.y);
+        this.isMoving = false;
+
         this.input.on('pointerdown', (pointer) => {
             if (pointer.x > 270 && pointer.y > 540) return;
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
             this.targetPoint.x = worldPoint.x;
             this.targetPoint.y = worldPoint.y;
             this.physics.moveToObject(this.player, this.targetPoint, 250);
-            
-            // Animation starten
-            let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
-            let deg = Phaser.Math.RadToDeg(angle);
-            this.playCorrectAnim(deg);
+            this.isMoving = true;
         });
     }
 
-    playCorrectAnim(deg) {
-        if (deg > -45 && deg <= 45) this.player.play('walk_r', true);
-        else if (deg > 45 && deg <= 135) this.player.play('walk_v', true);
-        else if (deg > -135 && deg <= -45) this.player.play('walk_h', true);
-        else this.player.play('walk_l', true);
-    }
-
     update() {
-        let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
-        if (dist < 10) {
-            this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
-            this.player.anims.stop();
-            this.player.setFrame(1); // Stehen bleiben mit Füßen
+        if (this.isMoving) {
+            let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
+            let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
+            let deg = Phaser.Math.RadToDeg(angle);
+
+            if (dist < 10) {
+                this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
+                this.player.anims.stop();
+                this.player.setFrame(1);
+                this.isMoving = false;
+            } else {
+                if (deg > -45 && deg <= 45) this.player.play('walk_r', true);
+                else if (deg > 45 && deg <= 135) this.player.play('walk_v', true);
+                else if (deg > -135 && deg <= -45) this.player.play('walk_h', true);
+                else this.player.play('walk_l', true);
+            }
         }
+        
+        // Sorgt dafür, dass der Sheriff vor oder hinter Kakteen steht (Y-Sort)
         this.player.setDepth(this.player.y);
+        this.obstacles.getChildren().forEach(o => o.setDepth(o.y));
     }
 }
 
@@ -109,7 +119,7 @@ const config = {
     type: Phaser.AUTO, width: 360, height: 640,
     physics: { 
         default: 'arcade',
-        arcade: { debug: false } // Debug aus, damit das Spiel sauber aussieht
+        arcade: { debug: false } // Schalte auf 'true' um die kleinen Hitboxen zu sehen
     },
     scene: [Overworld], pixelArt: true
 };
