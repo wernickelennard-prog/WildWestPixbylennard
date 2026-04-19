@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Hitbox & Open World Fix</title>
+    <title>Sheriff - Saloon Update</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
@@ -17,7 +17,6 @@ class Overworld extends Phaser.Scene {
     constructor() { super('Overworld'); }
 
     preload() {
-        // Spritesheets mit 512x512 laden (behält deine Animationen bei)
         const fConfig = { frameWidth: 512, frameHeight: 512 };
         this.load.spritesheet('s_v', 'Sheriff_spritesheet-vorne.png', fConfig);
         this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
@@ -25,63 +24,75 @@ class Overworld extends Phaser.Scene {
         this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', fConfig);
 
         this.load.image('sand', 'Sand.png'); 
-        this.load.image('bullet', 'Bullet.png');
         this.load.image('k1', 'Kaktus-.png'); 
         this.load.image('k2', 'Kaktus_anderer_art.png');
         this.load.image('k3', 'Kaktus-Kugel.png');
+        
+        // NEU: Saloon laden
+        this.load.image('saloon', 'Saloon-.jpg');
     }
 
     create() {
-        // OPEN WORLD: Wir machen die Welt groß
-        const worldSize = 3000;
+        const worldSize = 4000;
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
-        this.background = this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2.5);
+
+        // Biome
+        this.add.tileSprite(worldSize/4, worldSize/2, worldSize/2, worldSize, 'sand').setTileScale(2.5);
+        this.savanne = this.add.tileSprite(worldSize * 0.75, worldSize/2, worldSize/2, worldSize, 'sand');
+        this.savanne.setTileScale(2.5).setTint(0x99aa55); 
 
         this.obstacles = this.physics.add.staticGroup();
-        const kTypes = ['k1', 'k2', 'k3'];
 
-        for(let i = 0; i < 40; i++) {
-            let x = Phaser.Math.Between(100, worldSize - 100);
+        // SALOON OBEN RECHTS PLATZIEREN
+        // Wir setzen ihn auf 3700, 300 (Oben rechts)
+        this.saloonBuilding = this.obstacles.create(3700, 400, 'saloon').setScale(0.8).refreshBody();
+        // Hitbox vom Saloon anpassen (damit man nicht durch die Wände läuft)
+        this.saloonBuilding.body.setSize(this.saloonBuilding.width * 0.8, 200);
+        this.saloonBuilding.body.setOffset(this.saloonBuilding.width * 0.1, this.saloonBuilding.height - 200);
+
+        // TÜRAUSLÖSER (Trigger)
+        // Ein unsichtbares Rechteck genau vor der Tür
+        this.doorTrigger = this.add.rectangle(3700, 520, 100, 50, 0xff0000, 0); // Rot, aber unsichtbar (Alpha 0)
+        this.physics.add.existing(this.doorTrigger, true);
+
+        // Kakteen verteilen
+        for(let i = 0; i < 60; i++) {
+            let x = Phaser.Math.Between(100, worldSize - 400); // Platz für Saloon lassen
             let y = Phaser.Math.Between(100, worldSize - 100);
-            let k = this.obstacles.create(x, y, Phaser.Math.RND.pick(kTypes));
+            let key = x < worldSize/2 ? Phaser.Math.RND.pick(['k1', 'k2', 'k3']) : 'k2';
             
-            // --- HITBOX FIX FÜR KAKTEEN ---
-            k.setScale(0.3);
-            // Wir machen die Hitbox nur 40 Pixel breit (nur der Stamm), 
-            // damit man nicht hängen bleibt, wenn man daneben läuft
-            k.body.setSize(40, 40);
-            k.body.setOffset(236, 236); // Zentriert die kleine Hitbox
-            k.refreshBody();
-            
-            // Kleiner Schatten am Boden für die Optik
-            this.add.ellipse(x, y + 20, 40, 15, 0x000000, 0.2).setDepth(y - 1);
+            let obj = this.obstacles.create(x, y, key);
+            obj.setScale(0.3).refreshBody();
+            obj.body.setSize(60, 60).setOffset(obj.width/2-30, obj.height-80);
         }
 
-        // Sheriff (Wir lassen die Animationseinstellungen so wie sie sind)
+        // Sheriff
         this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 's_v', 1).setScale(0.3);
-        // Sheriff Hitbox schmaler machen, damit er zwischen Kakteen durchpasst
-        this.player.body.setSize(100, 60).setOffset(206, 420);
+        this.player.body.setSize(120, 60).setOffset(196, 430);
         this.player.setCollideWorldBounds(true);
 
-        // Animationen (wie von dir gewünscht unverändert in der Logik)
+        // Animationen
         const dirs = [{k:'v',s:'s_v'},{k:'h',s:'s_h'},{k:'r',s:'s_r'},{k:'l',s:'s_l'}];
         dirs.forEach(d => {
             this.anims.create({
                 key: 'walk_' + d.k,
                 frames: this.anims.generateFrameNumbers(d.s, { start: 0, end: 2 }),
-                frameRate: 8,
-                repeat: -1
+                frameRate: 8, repeat: -1
             });
         });
 
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.physics.add.collider(this.player, this.obstacles);
 
+        // ÜBERPRÜFUNG: Wenn der Sheriff die Tür berührt
+        this.physics.add.overlap(this.player, this.doorTrigger, () => {
+            this.enterSaloon();
+        });
+
         this.targetPoint = new Phaser.Math.Vector2(this.player.x, this.player.y);
         this.isMoving = false;
 
         this.input.on('pointerdown', (pointer) => {
-            if (pointer.x > 270 && pointer.y > 540) return;
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
             this.targetPoint.x = worldPoint.x;
             this.targetPoint.y = worldPoint.y;
@@ -90,8 +101,28 @@ class Overworld extends Phaser.Scene {
         });
     }
 
+    enterSaloon() {
+        if (!this.isEntering) {
+            this.isEntering = true;
+            this.player.body.stop();
+            this.isMoving = false;
+            
+            // Text anzeigen
+            let t = this.add.text(this.player.x, this.player.y - 100, "Betrete Saloon...", { 
+                fontSize: '20px', fill: '#fff', backgroundColor: '#000' 
+            }).setOrigin(0.5);
+
+            // Kamera ausblenden (Vorbereitung für nächste Location)
+            this.cameras.main.fadeOut(1000, 0, 0, 0);
+            this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+                console.log("Hier laden wir später das neue Level!");
+                // hier käme später: this.scene.start('SaloonInside');
+            });
+        }
+    }
+
     update() {
-        if (this.isMoving) {
+        if (this.isMoving && !this.isEntering) {
             let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
             let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
             let deg = Phaser.Math.RadToDeg(angle);
@@ -108,8 +139,6 @@ class Overworld extends Phaser.Scene {
                 else this.player.play('walk_l', true);
             }
         }
-        
-        // Sorgt dafür, dass der Sheriff vor oder hinter Kakteen steht (Y-Sort)
         this.player.setDepth(this.player.y);
         this.obstacles.getChildren().forEach(o => o.setDepth(o.y));
     }
@@ -117,10 +146,7 @@ class Overworld extends Phaser.Scene {
 
 const config = {
     type: Phaser.AUTO, width: 360, height: 640,
-    physics: { 
-        default: 'arcade',
-        arcade: { debug: false } // Schalte auf 'true' um die kleinen Hitboxen zu sehen
-    },
+    physics: { default: 'arcade', arcade: { debug: false } },
     scene: [Overworld], pixelArt: true
 };
 const game = new Phaser.Game(config);
