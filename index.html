@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Saloon Fix</title>
+    <title>Sheriff - Zoom & Anim Fix</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
-        body { margin: 0; padding: 0; background-color: #000; overflow: hidden; }
+        body { margin: 0; padding: 0; background-color: #000; overflow: hidden; touch-action: none; }
         canvas { display: block; margin: 0 auto; }
     </style>
 </head>
@@ -22,7 +22,6 @@ class Overworld extends Phaser.Scene {
         this.load.spritesheet('s_h', 'Sheriff_spritesheet-hinten.png', fConfig);
         this.load.spritesheet('s_r', 'Sheriff_spritesheet-rechts.png', fConfig);
         this.load.spritesheet('s_l', 'Sheriff-spritesheet-links.png', fConfig);
-
         this.load.image('sand', 'Sand.png'); 
         this.load.image('k1', 'Kaktus-.png'); 
         this.load.image('k2', 'Kaktus_anderer_art.png');
@@ -33,56 +32,75 @@ class Overworld extends Phaser.Scene {
     create() {
         const worldSize = 4000;
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
-
-        // Boden
         this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2.5);
 
         this.obstacles = this.physics.add.staticGroup();
 
-        // --- SALOON FIX ---
-        // 1. Viel größer skalieren (1.5 statt 0.8)
-        // 2. Position etwas tiefer, damit er "im Sand" steht
+        // SALOON: Etwas kleiner als vorher (1.2)
         const saloonX = 3500;
-        const saloonY = 500;
-        this.saloonBuilding = this.obstacles.create(saloonX, saloonY, 'saloon').setScale(1.8).refreshBody();
-        
-        // Schatten/Dreck unter dem Saloon, um den Boden-Übergang zu glätten
-        let saloonBase = this.add.rectangle(saloonX, saloonY + 350, 800, 100, 0x000000, 0.3).setOrigin(0.5);
-        
-        // Saloon-Hitbox: Nur der untere Teil ist solide, damit der Sheriff "vor" dem Haus laufen kann
-        this.saloonBuilding.body.setSize(this.saloonBuilding.width, 300);
-        this.saloonBuilding.body.setOffset(0, this.saloonBuilding.height - 300);
+        const saloonY = 600;
+        this.saloonBuilding = this.obstacles.create(saloonX, saloonY, 'saloon').setScale(1.2).refreshBody();
+        this.saloonBuilding.body.setSize(this.saloonBuilding.width, 250).setOffset(0, this.saloonBuilding.height - 250);
 
-        // TÜRAUSLÖSER (Größerer Bereich vor der Tür)
-        this.doorTrigger = this.add.rectangle(saloonX - 20, saloonY + 380, 150, 100, 0xff0000, 0); 
+        // Tür-Bereich
+        this.doorTrigger = this.add.rectangle(saloonX - 15, saloonY + 280, 120, 80, 0xff0000, 0); 
         this.physics.add.existing(this.doorTrigger, true);
 
-        // Kakteen (weniger, damit es ordentlicher aussieht)
-        for(let i = 0; i < 40; i++) {
-            let x = Phaser.Math.Between(200, worldSize - 800);
+        // Kakteen
+        for(let i = 0; i < 50; i++) {
+            let x = Phaser.Math.Between(200, worldSize - 600);
             let y = Phaser.Math.Between(200, worldSize - 200);
             let k = this.obstacles.create(x, y, Phaser.Math.RND.pick(['k1','k2','k3']));
-            k.setScale(0.35).refreshBody();
+            k.setScale(0.3).refreshBody();
             k.body.setSize(60, 60).setOffset(k.width/2-30, k.height-80);
         }
 
-        // --- SHERIFF FIX ---
-        // Ein bisschen kleiner (0.25 statt 0.3), damit das Haus massiver wirkt
+        // SHERIFF
         this.player = this.physics.add.sprite(worldSize/2, worldSize/2, 's_v', 1).setScale(0.25);
         this.player.body.setSize(120, 60).setOffset(196, 430);
         this.player.setCollideWorldBounds(true);
 
+        // ANIMATIONEN (Wieder aktiviert)
+        const dirs = [{k:'v',s:'s_v'},{k:'h',s:'s_h'},{k:'r',s:'s_r'},{k:'l',s:'s_l'}];
+        dirs.forEach(d => {
+            this.anims.create({
+                key: 'walk_' + d.k,
+                frames: this.anims.generateFrameNumbers(d.s, { start: 0, end: 2 }),
+                frameRate: 10, repeat: -1
+            });
+        });
+
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.physics.add.collider(this.player, this.obstacles);
-
-        // Überlappung mit der Tür
         this.physics.add.overlap(this.player, this.doorTrigger, () => this.enterSaloon());
 
+        // --- ZOOM LOGIK ---
+        this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
+            let newZoom = this.cameras.main.zoom - deltaY * 0.001;
+            this.cameras.main.setZoom(Phaser.Math.Clamp(newZoom, 0.3, 1.5));
+        });
+
+        // Pinch to Zoom (Handy)
+        this.input.addPointer(1); 
+        this.input.on('pointermove', (pointer) => {
+            if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
+                let dist = Phaser.Math.Distance.Between(this.input.pointer1.x, this.input.pointer1.y, this.input.pointer2.x, this.input.pointer2.y);
+                if (this.prevDist > 0) {
+                    let zoomDelta = (dist - this.prevDist) * 0.005;
+                    let newZoom = this.cameras.main.zoom + zoomDelta;
+                    this.cameras.main.setZoom(Phaser.Math.Clamp(newZoom, 0.3, 1.5));
+                }
+                this.prevDist = dist;
+            }
+        });
+        this.input.on('pointerup', () => { this.prevDist = 0; });
+
+        // Bewegung
         this.targetPoint = new Phaser.Math.Vector2(this.player.x, this.player.y);
         this.isMoving = false;
 
         this.input.on('pointerdown', (pointer) => {
-            if (this.isEntering) return;
+            if (this.isEntering || (this.input.pointer1.isDown && this.input.pointer2.isDown)) return;
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
             this.targetPoint.x = worldPoint.x;
             this.targetPoint.y = worldPoint.y;
@@ -96,23 +114,22 @@ class Overworld extends Phaser.Scene {
             this.isEntering = true;
             this.player.body.stop();
             this.cameras.main.fadeOut(1000, 0, 0, 0);
-            this.add.text(this.player.x, this.player.y - 120, "Öffne Tür...", { 
-                fontSize: '24px', fill: '#fbff00', fontStyle: 'bold', stroke: '#000', strokeThickness: 4
-            }).setOrigin(0.5);
         }
     }
 
     update() {
         if (this.isMoving && !this.isEntering) {
             let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
+            let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
+            let deg = Phaser.Math.RadToDeg(angle);
+
             if (dist < 10) {
                 this.player.body.reset(this.targetPoint.x, this.targetPoint.y);
                 this.player.anims.stop();
                 this.player.setFrame(1);
                 this.isMoving = false;
             } else {
-                let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.targetPoint.x, this.targetPoint.y);
-                let deg = Phaser.Math.RadToDeg(angle);
+                // Animationen hier abspielen
                 if (deg > -45 && deg <= 45) this.player.play('walk_r', true);
                 else if (deg > 45 && deg <= 135) this.player.play('walk_v', true);
                 else if (deg > -135 && deg <= -45) this.player.play('walk_h', true);
