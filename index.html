@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Saloon & Piano Update</title>
+    <title>Sheriff - Final Fix</title>
     <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
@@ -14,15 +14,26 @@
 <body>
 
 <script>
-// Gemeinsame Einstellungen für die Animationen
-const animsConfig = (scene) => {
-    ['v', 'h', 'r', 'l'].forEach(d => {
-        if (!scene.anims.exists('walk_'+d)) {
-            scene.anims.create({ key: 'walk_'+d, frames: scene.anims.generateFrameNumbers('s_'+d, {start:0, end:2}), frameRate: 10, repeat: -1 });
-            scene.anims.create({ key: 'shoot_'+d, frames: scene.anims.generateFrameNumbers('sh_'+d, {start:0, end:2}), frameRate: 15, repeat: 0 });
+// Zentrale Animations-Funktion, damit sie in beiden Szenen verfügbar ist
+function createGlobalAnims(scene) {
+    const dirs = ['v', 'h', 'r', 'l'];
+    dirs.forEach(d => {
+        if (!scene.anims.exists('walk_' + d)) {
+            scene.anims.create({
+                key: 'walk_' + d,
+                frames: scene.anims.generateFrameNumbers('s_' + d, { start: 0, end: 2 }),
+                frameRate: 10, repeat: -1
+            });
+        }
+        if (!scene.anims.exists('shoot_' + d)) {
+            scene.anims.create({
+                key: 'shoot_' + d,
+                frames: scene.anims.generateFrameNumbers('sh_' + d, { start: 0, end: 2 }),
+                frameRate: 15, repeat: 0
+            });
         }
     });
-};
+}
 
 class Overworld extends Phaser.Scene {
     constructor() { super('Overworld'); }
@@ -48,47 +59,79 @@ class Overworld extends Phaser.Scene {
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
         this.add.tileSprite(worldSize/2, worldSize/2, worldSize, worldSize, 'sand').setTileScale(2.5);
 
-        // Saloon-Verschmelzung (Dunkler Boden unter dem Haus)
+        // Saloon & Kakteen
         const sX = 3540, sY = 500;
         this.add.rectangle(sX, sY + 310, 1000, 120, 0x000000, 0.25).setOrigin(0.5);
         this.obstacles = this.physics.add.staticGroup();
         this.saloon = this.obstacles.create(sX, sY, 'saloon_ext').setScale(1.2).refreshBody();
-
-        // Tür-Trigger vergrößert
-        this.doorTrigger = this.add.rectangle(sX - 15, sY + 280, 150, 100, 0xff0000, 0);
-        this.physics.add.existing(this.doorTrigger, true);
+        
+        const kTypes = ['k1', 'k2', 'k3'];
+        for(let i = 0; i < 80; i++) {
+            let x = Phaser.Math.Between(100, worldSize-100);
+            let y = Phaser.Math.Between(100, worldSize-100);
+            if (Phaser.Math.Distance.Between(x, y, sX, sY) > 500) {
+                let k = this.obstacles.create(x, y, Phaser.Math.RND.pick(kTypes));
+                k.setScale(0.3).refreshBody();
+                k.body.setSize(60, 60).setOffset(k.width/2-30, k.height-80);
+            }
+        }
 
         this.bullets = this.physics.add.group();
         this.player = this.physics.add.sprite(2000, 2000, 's_v', 1).setScale(0.25);
         this.player.body.setSize(120, 60).setOffset(196, 430);
         this.currentDir = 'v';
 
-        animsConfig(this);
-        this.createShootButton();
+        createGlobalAnims(this);
+        this.createUI();
+        
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.physics.add.collider(this.player, this.obstacles);
+        
+        // Tür-Trigger
+        this.doorTrigger = this.add.rectangle(sX - 15, sY + 280, 150, 100, 0xff0000, 0);
+        this.physics.add.existing(this.doorTrigger, true);
         this.physics.add.overlap(this.player, this.doorTrigger, () => this.scene.start('SaloonInside'));
 
-        // PC-Steuerung: Pfeiltasten & Leertaste
+        // Steuerung
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.spaceBar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-
-        // Handy/Maus Laufen
         this.input.on('pointerdown', (p) => {
-            if (p.x > 650 && p.y > 450) return;
+            if (p.x > 600 && p.y > 400) return; // Button Bereich
             this.target = this.cameras.main.getWorldPoint(p.x, p.y);
             this.physics.moveToObject(this.player, this.target, 250);
             this.isMoving = true;
         });
+
+        // Zoom Logik
+        this.setupZoom();
     }
 
-    createShootButton() {
-        const btn = this.add.container(720, 520).setScrollFactor(0);
-        const circle = this.add.circle(0, 0, 45, 0xdaa520, 1).setStrokeStyle(4, 0x8b4513).setInteractive();
-        const core = this.add.circle(0, 0, 15, 0x333333); // "Zündhütchen" Optik
-        btn.add([circle, core]);
-        circle.on('pointerdown', () => { circle.setScale(0.9); this.shoot(); });
-        circle.on('pointerup', () => circle.setScale(1));
+    createUI() {
+        const btn = this.add.container(720, 520).setScrollFactor(0).setDepth(100);
+        const shell = this.add.circle(0, 0, 40, 0xcd7f32).setStrokeStyle(4, 0x8b4513).setInteractive();
+        const primer = this.add.circle(0, 0, 12, 0x333333);
+        const label = this.add.text(0, -55, 'FEUER', { fontFamily: '"Pixelify Sans"', fontSize: '18px', color: '#ffd700' }).setOrigin(0.5);
+        btn.add([shell, primer, label]);
+
+        shell.on('pointerdown', () => { shell.setScale(0.9); this.shoot(); });
+        shell.on('pointerup', () => shell.setScale(1));
+        this.input.keyboard.on('keydown-SPACE', () => this.shoot());
+    }
+
+    setupZoom() {
+        this.input.on('wheel', (p, g, dx, dy) => {
+            this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom - dy * 0.001, 0.4, 1.2));
+        });
+        this.input.addPointer(1);
+        let prevDist = 0;
+        this.input.on('pointermove', (p) => {
+            if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
+                let dist = Phaser.Math.Distance.Between(this.input.pointer1.x, this.input.pointer1.y, this.input.pointer2.x, this.input.pointer2.y);
+                if (prevDist > 0) {
+                    this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom + (dist - prevDist) * 0.005, 0.4, 1.2));
+                }
+                prevDist = dist;
+            }
+        });
     }
 
     shoot() {
@@ -96,36 +139,42 @@ class Overworld extends Phaser.Scene {
         this.isShooting = true;
         this.player.play('shoot_' + this.currentDir, true);
         const b = this.bullets.create(this.player.x, this.player.y, 'b_' + this.currentDir).setScale(0.6);
-        const speeds = { r: [1000, 0], l: [-1000, 0], v: [0, 1000], h: [0, -1000] };
-        b.body.setVelocity(...speeds[this.currentDir]);
-        this.time.delayedCall(200, () => { this.isShooting = false; });
+        const v = { r: [1000, 0], l: [-1000, 0], v: [0, 1000], h: [0, -1000] }[this.currentDir];
+        b.body.setVelocity(v[0], v[1]);
+        this.time.delayedCall(200, () => this.isShooting = false);
         this.time.delayedCall(1000, () => b.destroy());
     }
 
     update() {
-        // PC Bewegung Priorität
-        if (this.cursors.left.isDown) { this.player.setVelocityX(-250); this.player.play('walk_l', true); this.currentDir = 'l'; this.isMoving = false; }
-        else if (this.cursors.right.isDown) { this.player.setVelocityX(250); this.player.play('walk_r', true); this.currentDir = 'r'; this.isMoving = false; }
-        else if (this.cursors.up.isDown) { this.player.setVelocityY(-250); this.player.play('walk_h', true); this.currentDir = 'h'; this.isMoving = false; }
-        else if (this.cursors.down.isDown) { this.player.setVelocityY(250); this.player.play('walk_v', true); this.currentDir = 'v'; this.isMoving = false; }
-        else if (!this.isMoving) { this.player.setVelocity(0); this.player.anims.stop(); this.player.setFrame(1); }
+        this.player.setDepth(this.player.y);
+        if (this.isShooting) return;
 
-        if (Phaser.Input.Keyboard.JustDown(this.spaceBar)) this.shoot();
+        // Tastatur hat Vorrang
+        let moving = false;
+        this.player.setVelocity(0);
+        if (this.cursors.left.isDown) { this.player.setVelocityX(-250); this.currentDir = 'l'; moving = true; }
+        else if (this.cursors.right.isDown) { this.player.setVelocityX(250); this.currentDir = 'r'; moving = true; }
+        else if (this.cursors.up.isDown) { this.player.setVelocityY(-250); this.currentDir = 'h'; moving = true; }
+        else if (this.cursors.down.isDown) { this.player.setVelocityY(250); this.currentDir = 'v'; moving = true; }
 
-        // Maus-Bewegung Logik (wenn keine Tasten gedrückt)
-        if (this.isMoving && !this.isShooting) {
+        if (moving) {
+            this.player.play('walk_' + this.currentDir, true);
+            this.isMoving = false;
+        } else if (this.isMoving) {
             let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.target.x, this.target.y);
             if (dist < 10) { this.player.body.reset(this.target.x, this.target.y); this.isMoving = false; }
             else {
                 let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.target.x, this.target.y);
                 let deg = Phaser.Math.RadToDeg(angle);
-                if (deg > -45 && deg <= 45) { this.player.play('walk_r', true); this.currentDir = 'r'; }
-                else if (deg > 45 && deg <= 135) { this.player.play('walk_v', true); this.currentDir = 'v'; }
-                else if (deg > -135 && deg <= -45) { this.player.play('walk_h', true); this.currentDir = 'h'; }
-                else { this.player.play('walk_l', true); this.currentDir = 'l'; }
+                if (deg > -45 && deg <= 45) this.currentDir = 'r';
+                else if (deg > 45 && deg <= 135) this.currentDir = 'v';
+                else if (deg > -135 && deg <= -45) this.currentDir = 'h';
+                else this.currentDir = 'l';
+                this.player.play('walk_' + this.currentDir, true);
             }
+        } else {
+            this.player.anims.stop(); this.player.setFrame(1);
         }
-        this.player.setDepth(this.player.y);
     }
 }
 
@@ -133,8 +182,7 @@ class SaloonInside extends Phaser.Scene {
     constructor() { super('SaloonInside'); }
     preload() {
         this.load.image('saloon_bg', 'imSaloon.png');
-        // Echte Klavier Sounds (Beispiel URLs, da du keine Dateien geschickt hast)
-        this.load.audio('piano', 'https://actions.google.com/sounds/v1/science_fiction/beep_zap.ogg'); 
+        this.load.audio('piano_sound', 'https://actions.google.com/sounds/v1/science_fiction/beep_zap.ogg'); // Beispiel
     }
     create() {
         this.add.image(400, 300, 'saloon_bg').setScale(1.2);
@@ -142,38 +190,62 @@ class SaloonInside extends Phaser.Scene {
         this.player = this.physics.add.sprite(400, 315, 's_v', 1).setScale(0.4);
         this.player.setCollideWorldBounds(true);
         this.player.body.setSize(120, 60).setOffset(196, 430);
+        
+        createGlobalAnims(this);
 
-        // Klavier Position (Beispielhaft bei x:200, y:350)
-        this.piano = this.add.rectangle(200, 350, 100, 80, 0x000000, 0);
-        this.physics.add.existing(this.piano, true);
+        // Klavier Trigger (An dein Bild angepasst: Meistens links oder rechts an der Wand)
+        this.pianoTrigger = this.add.rectangle(180, 350, 120, 100, 0x000000, 0);
+        this.physics.add.existing(this.pianoTrigger, true);
 
-        this.pianoBtn = this.add.container(200, 280).setVisible(false);
-        this.pianoBtn.add([
-            this.add.circle(0, 0, 25, 0xffd700).setInteractive(),
-            this.add.text(0, 0, '♫', {fontSize:'20px', color:'#000'}).setOrigin(0.5)
-        ]);
+        // Musik Icon (Stimmigerer Stil)
+        this.pianoIcon = this.add.container(180, 300).setVisible(false);
+        const iconCircle = this.add.circle(0, 0, 20, 0x442200).setStrokeStyle(2, 0xffd700).setInteractive();
+        const iconNote = this.add.text(0, 0, '♪', { fontSize: '20px', color: '#ffd700' }).setOrigin(0.5);
+        this.pianoIcon.add([iconCircle, iconNote]);
+        
+        iconCircle.on('pointerdown', () => { 
+            this.sound.play('piano_sound');
+            this.add.text(this.player.x, this.player.y - 50, "*Klimper*", { fontFamily: '"Pixelify Sans"', fontSize: '16px', color: '#fff' }).setOrigin(0.5);
+        });
 
-        this.pianoBtn.getAt(0).on('pointerdown', () => { this.sound.play('piano'); });
-
-        this.exitTrigger = this.add.rectangle(400, 290, 100, 40, 0x00ff00, 0);
-        this.physics.add.existing(this.exitTrigger, true);
-        this.physics.add.overlap(this.player, this.exitTrigger, () => this.scene.start('Overworld'));
+        // Ausgang
+        this.exitDoor = this.add.rectangle(400, 290, 100, 40, 0x00ff00, 0);
+        this.physics.add.existing(this.exitDoor, true);
+        this.physics.add.overlap(this.player, this.exitDoor, () => this.scene.start('Overworld'));
 
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.target = new Phaser.Math.Vector2(this.player.x, this.player.y);
-        this.input.on('pointerdown', (p) => { this.target.copy(p); this.physics.moveToObject(this.player, this.target, 200); this.isMoving = true; });
+        this.input.on('pointerdown', (p) => {
+            this.target = p;
+            this.physics.moveToObject(this.player, this.target, 200);
+            this.isMoving = true;
+        });
     }
+
     update() {
-        // Klavier Button Sichtbarkeit
-        let distToPiano = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.piano.x, this.piano.y);
-        this.pianoBtn.setVisible(distToPiano < 100);
-        
-        // (Bewegungs-Logik wie oben)
-        if (this.cursors.left.isDown) this.player.setVelocityX(-200);
-        else if (this.cursors.right.isDown) this.player.setVelocityX(200);
-        else if (this.cursors.up.isDown) this.player.setVelocityY(-200);
-        else if (this.cursors.down.isDown) this.player.setVelocityY(200);
-        else if (!this.isMoving) this.player.setVelocity(0);
+        let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.pianoTrigger.x, this.pianoTrigger.y);
+        this.pianoIcon.setVisible(dist < 80);
+
+        let moving = false;
+        this.player.setVelocity(0);
+        if (this.cursors.left.isDown) { this.player.setVelocityX(-200); this.currentDir = 'l'; moving = true; }
+        else if (this.cursors.right.isDown) { this.player.setVelocityX(200); this.currentDir = 'r'; moving = true; }
+        else if (this.cursors.up.isDown) { this.player.setVelocityY(-200); this.currentDir = 'h'; moving = true; }
+        else if (this.cursors.down.isDown) { this.player.setVelocityY(200); this.currentDir = 'v'; moving = true; }
+
+        if (moving) {
+            this.player.play('walk_' + this.currentDir, true);
+            this.isMoving = false;
+        } else if (this.isMoving) {
+            let d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.target.x, this.target.y);
+            if (d < 10) { this.player.body.reset(this.target.x, this.target.y); this.isMoving = false; }
+            else {
+                let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.target.x, this.target.y);
+                this.currentDir = (Math.abs(angle) < Math.PI/4) ? 'r' : (Math.abs(angle) > 3*Math.PI/4) ? 'l' : (angle > 0) ? 'v' : 'h';
+                this.player.play('walk_' + this.currentDir, true);
+            }
+        } else {
+            this.player.anims.stop(); this.player.setFrame(1);
+        }
     }
 }
 
