@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sheriff - Sand & Animation Fix</title>
+    <title>Sheriff - Sand Tile Fix</title>
     <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
@@ -41,9 +41,12 @@ class Overworld extends Phaser.Scene {
         this.load.spritesheet('sh_l', 'Sheriff-spritesheet_Lschuss.png', fConfig);
         this.load.image('b_v', 'Kugel-V.png'); this.load.image('b_h', 'Kugel-H.png');
         this.load.image('b_r', 'Kugel-R.png'); this.load.image('b_l', 'Kugel-L.png');
+        
+        // Sand Texturen laden
         this.load.image('sand0', 'Sand.png');
         this.load.image('sand1', 'Sand-Anders1.png');
         this.load.image('sand2', 'Sand-Anders2.png');
+        
         this.load.image('stein', 'Stein-1.png');
         this.load.image('k1', 'Kaktus-.png'); this.load.image('k2', 'Kaktus_anderer_art.png'); this.load.image('k3', 'Kaktus-Kugel.png');
         this.load.image('saloon_ext', 'Saloon-.png');
@@ -52,12 +55,15 @@ class Overworld extends Phaser.Scene {
 
     create() {
         const worldSize = 4000;
+        const tileSize = 512; // Deine Pixel-Größe
         this.physics.world.setBounds(0, 0, worldSize, worldSize);
 
-        // --- SAND-MIX FIX: Kacheln statt Strecken ---
-        for(let x = 0; x < worldSize; x += 512) {
-            for(let y = 0; y < worldSize; y += 512) {
-                let key = 'sand' + Phaser.Math.Between(0, 2);
+        // --- SAND-MIX FIX: Echte Kacheln ---
+        for(let x = 0; x < worldSize; x += tileSize) {
+            for(let y = 0; y < worldSize; y += tileSize) {
+                // Zufällige Auswahl der 3 Sand-Arten für jede Kachel
+                let rand = Phaser.Math.Between(0, 2);
+                let key = 'sand' + rand;
                 this.add.image(x, y, key).setOrigin(0).setDepth(-10);
             }
         }
@@ -65,10 +71,11 @@ class Overworld extends Phaser.Scene {
         this.obstacles = this.physics.add.staticGroup();
         this.bullets = this.physics.add.group();
 
-        // Gebäude & Deko
+        // Gebäude
         this.saloon = this.obstacles.create(3500, 500, 'saloon_ext').setScale(1.2).refreshBody();
         this.caveEnt = this.obstacles.create(500, 500, 'cave_ent').setScale(1.0).refreshBody();
 
+        // Deko (Steine & Kakteen)
         for(let i = 0; i < 100; i++) {
             let rx = Phaser.Math.Between(100, 3900), ry = Phaser.Math.Between(100, 3900);
             if (Phaser.Math.Distance.Between(rx, ry, 3500, 500) > 600) {
@@ -93,15 +100,16 @@ class Overworld extends Phaser.Scene {
     setupControls() {
         this.cursors = this.input.keyboard.createCursorKeys();
         
-        // Laufen per Klick
+        // Laufen per Klick/Tippen
         this.input.on('pointerdown', (p) => {
-            if (p.x > 600 && p.y > 400) return; // Button-Bereich ignorieren
+            // Button-Bereich (unten rechts) ignorieren
+            if (p.x > 600 && p.y > 400) return; 
             this.target = this.cameras.main.getWorldPoint(p.x, p.y);
-            this.physics.moveToObject(this.player, this.target, 150);
+            this.physics.moveToObject(this.player, this.target, 150); // Speed 150
             this.isMoving = true;
         });
 
-        // Zoom (Maus & Pinch)
+        // ZOOM FIX: Mausrad & Pinch
         this.input.on('wheel', (p, g, dx, dy) => {
             this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom - dy * 0.001, 0.4, 1.2));
         });
@@ -111,10 +119,13 @@ class Overworld extends Phaser.Scene {
         this.input.on('pointermove', () => {
             if (this.input.pointer1.isDown && this.input.pointer2.isDown) {
                 let dist = Phaser.Math.Distance.Between(this.input.pointer1.x, this.input.pointer1.y, this.input.pointer2.x, this.input.pointer2.y);
-                if (prevDist > 0) this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom + (dist - prevDist) * 0.005, 0.4, 1.2));
+                if (prevDist > 0) {
+                    this.cameras.main.setZoom(Phaser.Math.Clamp(this.cameras.main.zoom + (dist - prevDist) * 0.005, 0.4, 1.2));
+                }
                 prevDist = dist;
             }
         });
+        this.input.on('pointerup', () => { prevDist = 0; });
     }
 
     createShootButton() {
@@ -122,8 +133,8 @@ class Overworld extends Phaser.Scene {
         const circle = this.add.circle(0, 0, 45, 0xcd7f32).setStrokeStyle(4, 0x8b4513).setInteractive();
         btn.add([circle, this.add.text(0, 0, 'SHOT', { fontFamily: '"Pixelify Sans"', fontSize: '18px' }).setOrigin(0.5)]);
         
+        // WICHTIG: stopPropagation verhindert, dass der Sheriff zum Button läuft
         circle.on('pointerdown', (p) => { 
-            p.stopPropagation(); // Verhindert, dass der Sheriff dorthin läuft
             this.shoot(); 
         });
         this.input.keyboard.on('keydown-SPACE', () => this.shoot());
@@ -141,16 +152,17 @@ class Overworld extends Phaser.Scene {
     }
 
     update() {
+        this.player.setDepth(this.player.y);
         if (this.isShooting) return;
 
         let moving = false;
-        // Tastatur-Check
+        // Tastatur
         if (this.cursors.left.isDown) { this.player.setVelocityX(-150); this.currentDir = 'l'; moving = true; }
         else if (this.cursors.right.isDown) { this.player.setVelocityX(150); this.currentDir = 'r'; moving = true; }
         else if (this.cursors.up.isDown) { this.player.setVelocityY(-150); this.currentDir = 'h'; moving = true; }
         else if (this.cursors.down.isDown) { this.player.setVelocityY(150); this.currentDir = 'v'; moving = true; }
 
-        // Maus/Touch-Check
+        // Touch/Maus Bewegung & Animation
         if (this.isMoving && !moving) {
             let dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.target.x, this.target.y);
             if (dist < 10) { 
@@ -159,7 +171,11 @@ class Overworld extends Phaser.Scene {
             } else {
                 moving = true;
                 let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.target.x, this.target.y);
-                this.currentDir = (Math.abs(angle) < Math.PI/4) ? 'r' : (Math.abs(angle) > 3*Math.PI/4) ? 'l' : (angle > 0) ? 'v' : 'h';
+                let deg = Phaser.Math.RadToDeg(angle);
+                if (deg > -45 && deg <= 45) this.currentDir = 'r';
+                else if (deg > 45 && deg <= 135) this.currentDir = 'v';
+                else if (deg > -135 && deg <= -45) this.currentDir = 'h';
+                else this.currentDir = 'l';
             }
         }
 
@@ -173,7 +189,7 @@ class Overworld extends Phaser.Scene {
     }
 }
 
-// Höhlen-Szene mit deinen Texturen
+// Höhlenszene mit Böden
 class CaveScene extends Phaser.Scene {
     constructor() { super('CaveScene'); }
     preload() {
@@ -183,6 +199,7 @@ class CaveScene extends Phaser.Scene {
     }
     create() {
         const cW = 1200, cH = 800;
+        this.physics.world.setBounds(0, 0, cW, cH);
         for(let x=0; x<cW; x+=256) {
             for(let y=0; y<cH; y+=256) {
                 this.add.image(x, y, Phaser.Math.Between(0,1) === 0 ? 'c_floor1' : 'c_floor2').setOrigin(0);
@@ -191,9 +208,9 @@ class CaveScene extends Phaser.Scene {
         for(let x=0; x<cW; x+=512) this.add.image(x, 0, 'c_wall').setOrigin(0).setDepth(5);
         this.player = this.physics.add.sprite(600, 600, 's_h', 1).setScale(0.4);
         setupAnims(this);
-        this.cursors = this.input.keyboard.createCursorKeys();
         this.cameras.main.startFollow(this.player);
         this.add.text(600, 750, 'ZURÜCK', {fontFamily:'"Pixelify Sans"'}).setOrigin(0.5).setInteractive().on('pointerdown', () => this.scene.start('Overworld'));
+        this.cursors = this.input.keyboard.createCursorKeys();
     }
     update() {
         this.player.setVelocity(0);
